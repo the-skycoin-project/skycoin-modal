@@ -22,19 +22,23 @@
                                         </center>
                                     </div>
                                     <div class="col-md-12">
-                                        <h2>{{.Site.Params.Address}}</h2>
-                                        <p>{{.Site.Params.Amount}}</p>
+																			<br>
+																			<p>Payment Address:</p>
+                                        <h4>{{.Site.Params.Address | safeHTML}}</h4>
+																				<p>Payment Amount:</p>
+                                        <p>${{.Site.Params.Amount | safeHTML}}</p>
                                         <p>
                                         </p>
+																				{{.Site.Params.IfInvoice | safeHTML}}
                                         <p class="description">
-                                        {{.Site.Params.Invoice}}
+                                        {{.Site.Params.Invoice | safeHTML}}
                                         </p>
+																				{{.Site.Params.end | safeHTML}}
                                     </div>
                                 </div>
                             </div>
                             <div id="IdFooter" class="panel-footer text-center">
                             <ul>
-				                   {{/* partial "social.html" . */}}
 				            </ul>
                             </div>
                         </div>

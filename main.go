@@ -19,6 +19,8 @@ import (
 	"strings"
 	"html/template"
 	"time"
+	_ "github.com/the-skycoin-project/skycoin-modal/statik"
+	"github.com/rakyll/statik/fs"
 	)
 
 func init() {
@@ -102,6 +104,10 @@ func CreateContextForTestSetup() AppEnv {
 
 // StartServer Wraps the mux Router and uses the Negroni Middleware
 func StartServer(appEnv AppEnv) {
+	statikFS, err := fs.New()
+	if err != nil {
+		log.Fatal(err)
+	}
 	router := mux.NewRouter().StrictSlash(true)
 	for _, route := range routes {
 		var handler http.Handler
@@ -112,6 +118,8 @@ func StartServer(appEnv AppEnv) {
 			Name(route.Name).
 			Handler(handler)
 	}
+	router.PathPrefix("/").Handler(http.StripPrefix("/", http.FileServer(statikFS)))
+
 	// security
 	var isDevelopment = false
 	if appEnv.Env == "LOCAL" {
@@ -165,8 +173,18 @@ var routes = Routes{
 	/*// https://docs.snipcart.com/v3/custom-payment-gateway/technical-reference //*/
 	/*// https://docs.snipcart.com/v3/custom-payment-gateway/technical-reference#payment-methods //*/
 	Route{"PaymentMethods", "POST", "/paywithskycoin", PaymentMethodsURL},	//return payment methods
+	Route{"ModalTest", "GET", "/paywithskycoin", ModalTestURL},	//test view of payment modal
 	Route{"Payment", "GET", "/paywithskycoin/payment/{slug}", PaymentURL},	//payment modal or request page
+	/*
+	r := mux.NewRouter().StrictSlash(true)
+	r.HandleFunc("/healthcheck", HealthcheckHandler).Methods("GET")
+	r.HandleFunc("/paywithskycoin", PaymentMethodsURL).Methods("POST") //return payment methods
+	r.HandleFunc("/paywithskycoin", ModalTestURL).Methods("GET") //test view of payment modal
+	r.HandleFunc("/paywithskycoin/payment/{slug}", PaymentURL).Methods("GET") //payment modal or request page
 	//Route{"SubmitPayment", "POST", "/paywithskycoin/payment/{slug}/confirm", SubmitPaymentURL}, //post request here with the txid
+	//r.PathPrefix("/public/").Handler(http.StripPrefix("/public/", http.FileServer(http.Dir("./public"))))
+	*/
+
 }
 
 // HandlerFunc is a custom implementation of the http.HandlerFunc
@@ -235,6 +253,40 @@ fmt.Println(body)
 func monthDayYear() string {
 	return time.Now().Format("Monday January 2, 2006 15:04:05")
 }
+
+func ModalTestURL(w http.ResponseWriter, req *http.Request, appEnv AppEnv) {
+wd, err := os.Getwd()
+if err != nil {
+	 log.Fatal(err)
+}
+var fm = template.FuncMap{
+	"fdateMDY": monthDayYear,
+}
+pmr := PaymentRequest{}
+pmr.Address = "2jBbGxZRGoQG1mqhPBnXnLTxK6oxsTf8os6" //hardcoding genesis address as example
+pmr.Amount = 100
+//payment modal
+tpl1 := template.Must(template.New("").Funcs(fm).ParseFiles(wd + "/public/index.html"))
+tpl1.ExecuteTemplate(w, "index.html", pmr)
+
+/*
+url :=  "https://payment.snipcart.com/api/private/custom-payment-gateway/payment"
+var jsonStr = []byte(`{"paymentSessionId:" pmtid, "state:" "processed", "error:" {"code:" "", "message:" ""} }`)
+req, err = http.NewRequest("POST", url, bytes.NewBuffer(jsonStr))
+  req.Header.Set("Authorization", "Bearer <YOUR_SECRET_API_KEY>")
+	req.Header.Set("Content-Type", "application/json")
+	//resp, err = http.Get("")
+	if err != nil {
+		 slog.Fatalln(err)
+	}
+//We Read the response body on the line below.
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		 slog.Fatalln(err)
+}
+*/
+}
+
 
 func PaymentURL(w http.ResponseWriter, req *http.Request, appEnv AppEnv) {
 	slug := mux.Vars(req)["slug"] //public token provided previously must be validated first
