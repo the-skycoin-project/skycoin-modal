@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="{{ .Site.LanguageCode }}">
+<head>
+		<title> {{ .Site.Title }} </title>
+
+		{{ partial "head.html" . }}
+
+</head>
+    {{ partial "header.html" . }}
+<body>
+<div class="container-fluid" id="home-container">
+        <div class="row">
+            <div class="col-md-12">
+                <div class="col-md-4"></div>
+                    <div class="col-md-4">
+                        <div class="panel panel-default">
+                            <div class="panel-body text-center">
+                                <div class="row">
+                                    <div class="col-md-12 ">
+                                        <center>
+                                                <img class="media-object dp" src="{{ .Site.Params.QRCode }}" style="width: 256px;height:256px;">
+                                        </center>
+                                    </div>
+                                    <div class="col-md-12">
+                                        <h2>{{.Site.Params.Address}}</h2>
+                                        <p>{{.Site.Params.Amount}}</p>
+                                        <p>
+                                        </p>
+                                        <p class="description">
+                                        {{.Site.Params.Invoice}}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div id="IdFooter" class="panel-footer text-center">
+                            <ul>
+				                   {{/* partial "social.html" . */}}
+				            </ul>
+                            </div>
+                        </div>
+                    </div>
+                <div class="col-md-4"></div>
+                </div>
+        </div>
+    </div>
+    <div class="footer">
+    {{ partial "footer.html" . }}
+    </div>
+</body>
+</html>
