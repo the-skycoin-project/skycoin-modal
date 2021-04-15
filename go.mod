@@ -9,6 +9,7 @@ require (
 	github.com/palantir/stacktrace v0.0.0-20161112013806-78658fd2d177
 	github.com/pilu/config v0.0.0-20131214182432-3eb99e6c0b9a // indirect
 	github.com/pilu/fresh v0.0.0-20190826141211-0fa698148017 // indirect
+	github.com/rakyll/statik v0.1.7
 	github.com/sirupsen/logrus v1.8.1
 	github.com/unrolled/render v1.0.3
 	github.com/unrolled/secure v1.0.8

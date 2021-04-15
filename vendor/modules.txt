@@ -13,6 +13,9 @@ github.com/palantir/stacktrace/cleanpath
 ## explicit
 # github.com/pilu/fresh v0.0.0-20190826141211-0fa698148017
 ## explicit
+# github.com/rakyll/statik v0.1.7
+## explicit
+github.com/rakyll/statik/fs
 # github.com/sirupsen/logrus v1.8.1
 ## explicit
 github.com/sirupsen/logrus
