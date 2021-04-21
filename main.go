@@ -8,6 +8,7 @@ import (
 	slog "github.com/sirupsen/logrus"
 	"github.com/gorilla/mux"
 	"net/http"
+	"net/http/httputil"
 	"encoding/json"
 	"github.com/urfave/negroni"
 	"os"
@@ -210,11 +211,16 @@ func HealthcheckHandler(w http.ResponseWriter, req *http.Request, appEnv AppEnv)
 	appEnv.Render.JSON(w, http.StatusOK, check)
 }
 
-// CreateUserHandler adds a new user
+// return payment methods
 func PaymentMethodsURL(w http.ResponseWriter, req *http.Request, appEnv AppEnv) {
+	requestDump, err := httputil.DumpRequest(req, true)
+if err != nil {
+  fmt.Println(err)
+}
+fmt.Println(string(requestDump))
 	decoder := json.NewDecoder(req.Body)
 	var p PaymentMethods
-	err := decoder.Decode(&p)
+	err = decoder.Decode(&p)
 	if err != nil {
 		response := Response{
 			Status:  strconv.Itoa(http.StatusBadRequest),
@@ -227,6 +233,8 @@ func PaymentMethodsURL(w http.ResponseWriter, req *http.Request, appEnv AppEnv) 
 		appEnv.Render.JSON(w, http.StatusBadRequest, response)
 		return
 	}
+	fmt.Println(string("response Publictoken: %s" + p.Publictoken))
+
 //request validation step
 // https://docs.snipcart.com/v3/custom-payment-gateway/technical-reference#request
 	resp, err := http.Get("https://payment.snipcart.com/api/public/custom-payment-gateway/validate?publicToken="+ p.Publictoken)
@@ -238,22 +246,28 @@ func PaymentMethodsURL(w http.ResponseWriter, req *http.Request, appEnv AppEnv) 
 	if err != nil {
 		 slog.Fatalln(err)
 } //should do something with body, at least print to screen
-fmt.Println(body)
+fmt.Println(string(body))
 // fill in the struct with the response
-	pmr := PaymentMethodsResponse{}
-	pmr.ID =	"skycoin_payment"
-	pmr.Name =	"Pay with Skycoin"
-	pmr.Checkouturl = CheckOutUrl + p.Publictoken
-	appEnv.Render.JSON(w, http.StatusOK, pmr)
+pmr1 := make([]PaymentMethodsResponseStruct, 0)
+pmr := PaymentMethodsResponseStruct{}
+pmr.ID = "skycoin_payment"
+pmr.Name = "Skycoin"
+pmr.Checkouturl = CheckOutUrl //  + p.Publictoken,
+pmr1 = append(pmr1, pmr)
+pmr2, _ := json.Marshal(pmr)
+	fmt.Println(string(pmr2))
+
+	appEnv.Render.JSON(w, http.StatusOK, pmr1)
 }
 
 
 
-//func monthDayYear(t time.Time) string {
+//time function embedded in the page
 func monthDayYear() string {
 	return time.Now().Format("Monday January 2, 2006 15:04:05")
 }
 
+//same as paymentmethodsURL endpoint but handles GET
 func ModalTestURL(w http.ResponseWriter, req *http.Request, appEnv AppEnv) {
 wd, err := os.Getwd()
 if err != nil {
@@ -287,7 +301,7 @@ req, err = http.NewRequest("POST", url, bytes.NewBuffer(jsonStr))
 */
 }
 
-
+// here is the payment request
 func PaymentURL(w http.ResponseWriter, req *http.Request, appEnv AppEnv) {
 	slug := mux.Vars(req)["slug"] //public token provided previously must be validated first
 	resp, err := http.Get("https://payment.snipcart.com/api/public/custom-payment-gateway/validate?publicToken="+ slug )
@@ -314,7 +328,8 @@ if err != nil {
 var fm = template.FuncMap{
 	"fdateMDY": monthDayYear,
 }
-
+//req.ParseForm()
+//        fmt.Println("txid:", req.Form["txid"])
 pmr := PaymentRequest{}
 pmr.Address = "2jBbGxZRGoQG1mqhPBnXnLTxK6oxsTf8os6" //hardcoding genesis address as example
 pmr.Amount = pmtsess.Invoice.Amount
@@ -385,6 +400,56 @@ var AppUrl string = "https://magnetosphere.net/paywithskycoin/" // return paymen
 var CheckOutUrl string = "https://magnetosphere.net/paywithskycoin/payment/"	// payment modal
 //var PaymentUrl string = "https://magnetosphere.net/paywithskycoin/payment/confirm"	// post req here with txid
 
+	type PaymentMethods struct {
+			Invoice struct {
+				Shippingaddress struct {
+					Name            string      `json:"name"`
+					Streetandnumber string      `json:"streetAndNumber"`
+					Postalcode      string      `json:"postalCode"`
+					Country         string      `json:"country"`
+					City            string      `json:"city"`
+					Surname         interface{} `json:"surname"`
+					Region          interface{} `json:"region"`
+				} `json:"shippingAddress"`
+				Billingaddress struct {
+					Name            string      `json:"name"`
+					Streetandnumber string      `json:"streetAndNumber"`
+					Postalcode      string      `json:"postalCode"`
+					Country         string      `json:"country"`
+					City            string      `json:"city"`
+					Surname         interface{} `json:"surname"`
+					Region          interface{} `json:"region"`
+				} `json:"billingAddress"`
+				Email    string  `json:"email"`
+				Language string  `json:"language"`
+				Currency string  `json:"currency"`
+				Amount   float64 `json:"amount"`
+				Targetid string  `json:"targetId"`
+				Items    []struct {
+					Name                     string  `json:"name"`
+					Unitprice                float64 `json:"unitPrice"`
+					Quantity                 int     `json:"quantity"`
+					Type                     string  `json:"type"`
+					Discountamount           float64 `json:"discountAmount"`
+					Rateoftaxincludedinprice float64 `json:"rateOfTaxIncludedInPrice"`
+					Amount                   float64 `json:"amount"`
+				} `json:"items"`
+			} `json:"invoice"`
+			Publictoken string `json:"publicToken"`
+			Mode        string `json:"mode"`
+		}
+
+// the initial request from snipcart
+type PaymentMethodsResponse struct {
+	PMR []PaymentMethodsResponseStruct
+}
+	type PaymentMethodsResponseStruct struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Checkouturl string `json:"checkoutUrl"`
+	Iconurl     string `json:"iconUrl,omitempty"`
+}
+
 	type PaymentSession struct {
 	Invoice struct {
 		Shippingaddress struct {
@@ -421,50 +486,6 @@ var CheckOutUrl string = "https://magnetosphere.net/paywithskycoin/payment/"	// 
 	Paymentauthorizationredirecturl string `json:"paymentAuthorizationRedirectUrl"`
 }
 
-// the initial request from snipcart
-type PaymentMethods struct {
-	Invoice struct {
-		Shippingaddress struct {
-			Name            string      `json:"name"`
-			Streetandnumber string      `json:"streetAndNumber"`
-			Postalcode      string      `json:"postalCode"`
-			Country         string      `json:"country"`
-			City            string      `json:"city"`
-			Region          interface{} `json:"region"`
-		} `json:"shippingAddress"`
-		Billingaddress struct {
-			Name            string      `json:"name"`
-			Streetandnumber string      `json:"streetAndNumber"`
-			Postalcode      string      `json:"postalCode"`
-			Country         string      `json:"country"`
-			City            string      `json:"city"`
-			Region          interface{} `json:"region"`
-		} `json:"billingAddress"`
-		Email    string  `json:"email"`
-		Language string  `json:"language"`
-		Currency string  `json:"currency"`
-		Amount   float64 `json:"amount"`
-		Targetid string  `json:"targetId"`
-		Items    []struct {
-			Name                     string  `json:"name"`
-			Unitprice                float64 `json:"unitPrice"`
-			Quantity                 int     `json:"quantity"`
-			Type                     string  `json:"type"`
-			Rateoftaxincludedinprice int     `json:"rateOfTaxIncludedInPrice"`
-			Amount                   float64 `json:"amount"`
-		} `json:"items"`
-	} `json:"invoice"`
-	Publictoken string `json:"publicToken"`
-	Mode        string `json:"mode"`
-}
-
-
-type PaymentMethodsResponse struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Checkouturl string `json:"checkoutUrl"`
-	Iconurl     string `json:"iconUrl,omitempty"`
-}
 
 //sent as post request to snipcart to rgister payment in dashboard
 type Payment struct {
