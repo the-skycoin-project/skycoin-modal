@@ -78,7 +78,7 @@ starts on :
 In the test environment, `caddy` server is used to reverse proxy the app port (8041) to a subdomain of the main website.
 
 example Caddyfile:
-``1
+```
 pay.example.com {
 reverse_proxy 127.0.0.1:8041
 }
