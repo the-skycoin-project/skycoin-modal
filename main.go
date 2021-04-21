@@ -175,8 +175,8 @@ var routes = Routes{
 	/*// https://docs.snipcart.com/v3/custom-payment-gateway/technical-reference#payment-methods //*/
 	Route{"PaymentMethods", "POST", "/paywithskycoin", PaymentMethodsURL},	//return payment methods
 	Route{"ModalTest", "GET", "/paywithskycoin", ModalTestURL},	//test view of payment modal
-	Route{"Payment", "GET", "/paywithskycoin/payment/{slug}", PaymentURL},	//payment modal or request page
-	/*
+	Route{"Payment", "GET", "/paywithskycoin/payment/{slug}", PaymentURL},	//payment modal or request page //slug is jwtoken
+	/*	//alternative implementation
 	r := mux.NewRouter().StrictSlash(true)
 	r.HandleFunc("/healthcheck", HealthcheckHandler).Methods("GET")
 	r.HandleFunc("/paywithskycoin", PaymentMethodsURL).Methods("POST") //return payment methods
@@ -211,6 +211,9 @@ func HealthcheckHandler(w http.ResponseWriter, req *http.Request, appEnv AppEnv)
 	appEnv.Render.JSON(w, http.StatusOK, check)
 }
 
+// /* // SNIPCART INTEGRATION // */ //
+// https://docs.snipcart.com/v3/custom-payment-gateway/technical-reference#payment-methods
+// the endpoint /paywithskycoin should be set as the paymet method URL
 // return payment methods
 func PaymentMethodsURL(w http.ResponseWriter, req *http.Request, appEnv AppEnv) {
 	requestDump, err := httputil.DumpRequest(req, true)
@@ -233,8 +236,7 @@ fmt.Println(string(requestDump))
 		appEnv.Render.JSON(w, http.StatusBadRequest, response)
 		return
 	}
-	fmt.Println(string("response Publictoken: %s" + p.Publictoken))
-
+	fmt.Println(string("response Publictoken: %s\n" + p.Publictoken))
 //request validation step
 // https://docs.snipcart.com/v3/custom-payment-gateway/technical-reference#request
 	resp, err := http.Get("https://payment.snipcart.com/api/public/custom-payment-gateway/validate?publicToken="+ p.Publictoken)
@@ -259,8 +261,6 @@ pmr2, _ := json.Marshal(pmr)
 
 	appEnv.Render.JSON(w, http.StatusOK, pmr1)
 }
-
-
 
 //time function embedded in the page
 func monthDayYear() string {
@@ -486,7 +486,6 @@ type PaymentMethodsResponse struct {
 	Paymentauthorizationredirecturl string `json:"paymentAuthorizationRedirectUrl"`
 }
 
-
 //sent as post request to snipcart to rgister payment in dashboard
 type Payment struct {
 	Paymentsessionid string `json:"paymentSessionId"`
@@ -522,7 +521,6 @@ func (c *Check) GoString() string {
 		c.Version,
 	)
 }
-
 // Response is a custom response object we pass around the system and send back to the customer
 // 404: Not found
 // 500: Internal Server Error
@@ -530,7 +528,6 @@ type Response struct {
 	Status  string `json:"status"`
 	Message string `json:"message"`
 }
-
 // GoString implements the GoStringer interface so we can display the full struct during debugging
 // usage: fmt.Printf("%#v", i)
 // ensure that i is a pointer, so might need to do &i in some cases
@@ -544,8 +541,6 @@ func (r *Response) GoString() string {
 		r.Message,
 	)
 }
-
-
 // ParseVersionFile returns the version as a string, parsing and validating a file given the path
 func ParseVersionFile(versionPath string) (string, error) {
 	dat, err := ioutil.ReadFile(versionPath)
