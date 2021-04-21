@@ -44,7 +44,7 @@ Live-editing the hugo templates is also possible, this is done independent of th
 hugo server -D
 ```
 
-## Build the statik/statik.go file (not yet implemented)
+## Build the statik/statik.go file
 (requires the statik binary)
 ```
 go get github.com/rakyll/statik
@@ -71,3 +71,21 @@ make fresh
 
 starts on :
 [http://127.0.0.1:8041](http://127.0.0.1:8041)
+
+
+## Production deployment and Snipcart integration
+
+In the test environment, `caddy` server is used to reverse proxy the app port (8041) to a subdomain of the main website.
+
+example Caddyfile:
+``1
+pay.example.com {
+reverse_proxy 127.0.0.1:8041
+}
+```
+
+In the payment methods request URL field of the [snipcart dashboard](https://app.snipcart.com/dashboard/account/gateway/customgateway) the following endpoint is specified:
+
+```
+https://pay.example.com/paywithskycoin
+```
