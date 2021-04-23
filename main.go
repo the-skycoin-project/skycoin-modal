@@ -22,6 +22,7 @@ import (
 	"time"
 	_ "github.com/the-skycoin-project/skycoin-modal/statik"
 	"github.com/rakyll/statik/fs"
+	qrcode "github.com/yeqown/go-qrcode"
 	)
 
 func init() {
@@ -175,8 +176,8 @@ var routes = Routes{
 	/*// https://docs.snipcart.com/v3/custom-payment-gateway/technical-reference#payment-methods //*/
 	Route{"PaymentMethods", "POST", "/paywithskycoin", PaymentMethodsURL},	//return payment methods
 	Route{"ModalTest", "GET", "/paywithskycoin", ModalTestURL},	//test view of payment modal
-	Route{"Payment", "GET", "/paywithskycoin/payment/{slug}", PaymentURL},	//payment modal or request page //slug is jwtoken
-	/*	//alternative implementation
+	Route{"Payment", "GET", "/paywithskycoin/payment/{slug}", PaymentURL},	//payment modal or request page
+	/*
 	r := mux.NewRouter().StrictSlash(true)
 	r.HandleFunc("/healthcheck", HealthcheckHandler).Methods("GET")
 	r.HandleFunc("/paywithskycoin", PaymentMethodsURL).Methods("POST") //return payment methods
@@ -211,9 +212,6 @@ func HealthcheckHandler(w http.ResponseWriter, req *http.Request, appEnv AppEnv)
 	appEnv.Render.JSON(w, http.StatusOK, check)
 }
 
-// /* // SNIPCART INTEGRATION // */ //
-// https://docs.snipcart.com/v3/custom-payment-gateway/technical-reference#payment-methods
-// the endpoint /paywithskycoin should be set as the paymet method URL
 // return payment methods
 func PaymentMethodsURL(w http.ResponseWriter, req *http.Request, appEnv AppEnv) {
 	requestDump, err := httputil.DumpRequest(req, true)
@@ -236,9 +234,11 @@ fmt.Println(string(requestDump))
 		appEnv.Render.JSON(w, http.StatusBadRequest, response)
 		return
 	}
-	fmt.Println(string("response Publictoken: %s\n" + p.Publictoken))
+	fmt.Println(string("response Publictoken: " + p.Publictoken))
+
 //request validation step
 // https://docs.snipcart.com/v3/custom-payment-gateway/technical-reference#request
+fmt.Println("Request validation...")
 	resp, err := http.Get("https://payment.snipcart.com/api/public/custom-payment-gateway/validate?publicToken="+ p.Publictoken)
 	if err != nil {
 		 slog.Fatalln(err)
@@ -248,13 +248,14 @@ fmt.Println(string(requestDump))
 	if err != nil {
 		 slog.Fatalln(err)
 } //should do something with body, at least print to screen
+fmt.Println("request validation response:")
 fmt.Println(string(body))
 // fill in the struct with the response
 pmr1 := make([]PaymentMethodsResponseStruct, 0)
 pmr := PaymentMethodsResponseStruct{}
 pmr.ID = "skycoin_payment"
 pmr.Name = "Skycoin"
-pmr.Checkouturl = CheckOutUrl //  + p.Publictoken,
+pmr.Checkouturl = CheckOutUrl + p.Publictoken
 pmr1 = append(pmr1, pmr)
 pmr2, _ := json.Marshal(pmr)
 	fmt.Println(string(pmr2))
@@ -278,7 +279,11 @@ var fm = template.FuncMap{
 }
 pmr := PaymentRequest{}
 pmr.Address = "2jBbGxZRGoQG1mqhPBnXnLTxK6oxsTf8os6" //hardcoding genesis address as example
-pmr.Amount = 100
+var pricequeryresponse PriceQuery
+getJson("https://api.coinpaprika.com/v1/tickers/sky-skycoin?quotes=USD", &pricequeryresponse)
+currentrate := 	pricequeryresponse.Quotes.Usd.Price
+pmr.UsdAmount = 100
+pmr.SkyAmount = pmr.UsdAmount / currentrate
 //payment modal
 tpl1 := template.Must(template.New("").Funcs(fm).ParseFiles(wd + "/public/index.html"))
 tpl1.ExecuteTemplate(w, "index.html", pmr)
@@ -301,42 +306,59 @@ req, err = http.NewRequest("POST", url, bytes.NewBuffer(jsonStr))
 */
 }
 
-// here is the payment request
+// here is the payment request	// url slug is the token
 func PaymentURL(w http.ResponseWriter, req *http.Request, appEnv AppEnv) {
 	slug := mux.Vars(req)["slug"] //public token provided previously must be validated first
-	resp, err := http.Get("https://payment.snipcart.com/api/public/custom-payment-gateway/validate?publicToken="+ slug )
-	if err != nil {
-		 slog.Fatalln(err)
-	}
-//We Read the response body on the line below.
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		 slog.Fatalln(err)
-}
-fmt.Println(body)
+	fmt.Println(slug)
+	fmt.Println("validating request")
+	var validate PaymentMethods
+	getJson("https://payment.snipcart.com/api/public/custom-payment-gateway/validate?publicToken="+ slug, &validate)
 
+fmt.Println("PaymentUrl Request Body:")
+//var pmrbody string
+//_ = json.Unmarshal([]byte(validate), &pmrbody)
+fmt.Println(validate)
 //retrieve the payment session
 pmtsess := PaymentSession{}
-getJson("https://payment.snipcart.com/api/public/custom-payment-gateway/payment-session?publicToken="+ slug, &pmtsess)
+
+getJson("https://payment.snipcart.com/api/public/custom-payment-gateway/payment-session?publicToken=" + slug, &pmtsess)
+getpaymentsession := "https://payment.snipcart.com/api/public/custom-payment-gateway/payment-session?publicToken=" + slug
+fmt.Println(string(getpaymentsession))
+
 pmtid := pmtsess.ID
-fmt.Println(pmtid)
+var readableid string
+_ = json.Unmarshal([]byte(pmtid), &readableid)
+
+fmt.Println("Payment ID:")
+
+fmt.Println(string(readableid))
 
 wd, err := os.Getwd()
 if err != nil {
 	 log.Fatal(err)
 }
-var fm = template.FuncMap{
+var fm = template.FuncMap{	//current time is displayed in the page
 	"fdateMDY": monthDayYear,
 }
 //req.ParseForm()
 //        fmt.Println("txid:", req.Form["txid"])
 pmr := PaymentRequest{}
-pmr.Address = "2jBbGxZRGoQG1mqhPBnXnLTxK6oxsTf8os6" //hardcoding genesis address as example
-pmr.Amount = pmtsess.Invoice.Amount
+pmr.Address = nextAddress()
+qrc, err := qrcode.New("skycoin:" + pmr.Address)
+if err != nil {
+	fmt.Printf("could not generate QRCode: %v", err)
+}
+pmr.QRCode = qrc
+pmr.UsdAmount = pmtsess.Invoice.Amount
+var pricequeryresponse PriceQuery
+//https://api.coinpaprika.com/v1/tickers/sky-skycoin?quotes=USD
+getJson("https://api.coinpaprika.com/v1/tickers/sky-skycoin?quotes=USD", &pricequeryresponse)
+currentrate := 	pricequeryresponse.Quotes.Usd.Price
+
+pmr.SkyAmount = pmtsess.Invoice.Amount / currentrate
 //payment modal
 tpl1 := template.Must(template.New("").Funcs(fm).ParseFiles(wd + "/public/index.html"))
 tpl1.ExecuteTemplate(w, "index.html", pmr)
-
 /*
 url :=  "https://payment.snipcart.com/api/private/custom-payment-gateway/payment"
 var jsonStr = []byte(`{"paymentSessionId:" pmtid, "state:" "processed", "error:" {"code:" "", "message:" ""} }`)
@@ -396,11 +418,39 @@ func SubmitPaymentURL(w http.ResponseWriter, req *http.Request, appEnv AppEnv) {
 }
 */
 
-var AppUrl string = "https://magnetosphere.net/paywithskycoin/" // return payment methods
-var CheckOutUrl string = "https://magnetosphere.net/paywithskycoin/payment/"	// payment modal
+func nextAddress() string {
+	file, _ := ioutil.ReadFile("addresses.txt")
+	notfound := "address not found"
+	addresses := AddressList{}
+	address := notfound //default to not found, overwrite address when found
+	testaddress := notfound
+	_ = json.Unmarshal([]byte(file), &addresses)
+	for i := 0; i < len(addresses.Addresses); i++ {
+		if address == notfound {
+			var q CurrentBalance //the struct that maps to the response of the query
+			testaddress = addresses.Addresses[i]
+			getJson("http://127.0.0.1:8001/api/CurrentBalance?addrs="+ testaddress, &q)
+			//resp, err := http.Get("http://127.0.0.1:8001/api/CurrentBalance?addrs="+ addresses.Addresses[i] )	//quey the address balance
+			fmt.Println("Address")
+			fmt.Println(string(testaddress))
+			//fmt.Println(string("Head Outputs: %s", q.HeadOutputs.Coins))
+			if q.HeadOutputs == nil {
+				fmt.Println(string("Address is empty, Using:"))
+				fmt.Println(string(testaddress))
+				address = testaddress
+				fmt.Println(address)
+				return address
+			}
+		}
+	}
+return address
+}
+
+var AppUrl string = "https://pay.magnetosphere.net/paywithskycoin/" // return payment methods
+var CheckOutUrl string = "https://pay.magnetosphere.net/paywithskycoin/payment/"	// payment modal
 //var PaymentUrl string = "https://magnetosphere.net/paywithskycoin/payment/confirm"	// post req here with txid
 
-	type PaymentMethods struct {
+	type PaymentMethods struct {	// bad name for this func
 			Invoice struct {
 				Shippingaddress struct {
 					Name            string      `json:"name"`
@@ -486,6 +536,7 @@ type PaymentMethodsResponse struct {
 	Paymentauthorizationredirecturl string `json:"paymentAuthorizationRedirectUrl"`
 }
 
+
 //sent as post request to snipcart to rgister payment in dashboard
 type Payment struct {
 	Paymentsessionid string `json:"paymentSessionId"`
@@ -497,17 +548,87 @@ type Payment struct {
 }
 
 type PaymentRequest struct {
-	QRCode string
+	QRCode *qrcode.QRCode
 	Address string
-	Amount float64
+	SkyAmount float64
+	UsdAmount float64
 }
 
+// https://github.com/skycoin/skycoin/tree/develop/cmd/skycoin-cli#list-wallet-addresses
+// struct maps to the output of `skycoin-cli listAddresses [wallet]`
+type AddressList struct {
+	Addresses []string `json:"addresses"`
+}
+// https://explorer.skycoin.com/api.html
+// /api/currentBalance?addrs=SeDoYN6SNaTiAZFHwArnFwQmcyz7ZvJm17,iqi5BpPhEqt35SaeMLKA94XnzBG57hToNi
+type CurrentBalance struct {
+	Head struct {
+		Seq               int    `json:"seq"`
+		BlockHash         string `json:"block_hash"`
+		PreviousBlockHash string `json:"previous_block_hash"`
+		Timestamp         int    `json:"timestamp"`
+		Fee               int    `json:"fee"`
+		Version           int    `json:"version"`
+		TxBodyHash        string `json:"tx_body_hash"`
+		UxHash            string `json:"ux_hash"`
+	} `json:"head"`
+	HeadOutputs []struct {
+		Hash            string `json:"hash"`
+		Time            int    `json:"time"`
+		BlockSeq        int    `json:"block_seq"`
+		SrcTx           string `json:"src_tx"`
+		Address         string `json:"address"`
+		Coins           string `json:"coins"`
+		Hours           int    `json:"hours"`
+		CalculatedHours int    `json:"calculated_hours"`
+	} `json:"head_outputs"`
+	OutgoingOutputs []interface{} `json:"outgoing_outputs"`
+	IncomingOutputs []interface{} `json:"incoming_outputs"`
+}
+
+type PriceQuery struct {
+	ID                string    `json:"id"`
+	Name              string    `json:"name"`
+	Symbol            string    `json:"symbol"`
+	Rank              int       `json:"rank"`
+	CirculatingSupply int       `json:"circulating_supply"`
+	TotalSupply       int       `json:"total_supply"`
+	MaxSupply         int       `json:"max_supply"`
+	BetaValue         float64   `json:"beta_value"`
+	FirstDataAt       time.Time `json:"first_data_at"`
+	LastUpdated       time.Time `json:"last_updated"`
+	Quotes            struct {
+		Usd struct {
+			Price               float64   `json:"price"`
+			Volume24H           float64   `json:"volume_24h"`
+			Volume24HChange24H  float64   `json:"volume_24h_change_24h"`
+			MarketCap           int       `json:"market_cap"`
+			MarketCapChange24H  float64   `json:"market_cap_change_24h"`
+			PercentChange15M    float64   `json:"percent_change_15m"`
+			PercentChange30M    float64   `json:"percent_change_30m"`
+			PercentChange1H     float64   `json:"percent_change_1h"`
+			PercentChange6H     float64   `json:"percent_change_6h"`
+			PercentChange12H    float64   `json:"percent_change_12h"`
+			PercentChange24H    float64   `json:"percent_change_24h"`
+			PercentChange7D     float64   `json:"percent_change_7d"`
+			PercentChange30D    float64   `json:"percent_change_30d"`
+			PercentChange1Y     float64   `json:"percent_change_1y"`
+			AthPrice            float64   `json:"ath_price"`
+			AthDate             time.Time `json:"ath_date"`
+			PercentFromPriceAth float64   `json:"percent_from_price_ath"`
+		} `json:"USD"`
+	} `json:"quotes"`
+}
+
+
+
+
+// Below here is back to the unmodified code
 // Check will store information about its name and version
 type Check struct {
 	AppName string `json:"appName"`
 	Version string `json:"version"`
 }
-
 // GoString implements the GoStringer interface so we can display the full struct during debugging
 // usage: fmt.Printf("%#v", i)
 // ensure that i is a pointer, so might need to do &i in some cases
@@ -521,6 +642,7 @@ func (c *Check) GoString() string {
 		c.Version,
 	)
 }
+
 // Response is a custom response object we pass around the system and send back to the customer
 // 404: Not found
 // 500: Internal Server Error
@@ -528,6 +650,7 @@ type Response struct {
 	Status  string `json:"status"`
 	Message string `json:"message"`
 }
+
 // GoString implements the GoStringer interface so we can display the full struct during debugging
 // usage: fmt.Printf("%#v", i)
 // ensure that i is a pointer, so might need to do &i in some cases
@@ -541,6 +664,8 @@ func (r *Response) GoString() string {
 		r.Message,
 	)
 }
+
+
 // ParseVersionFile returns the version as a string, parsing and validating a file given the path
 func ParseVersionFile(versionPath string) (string, error) {
 	dat, err := ioutil.ReadFile(versionPath)

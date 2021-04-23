@@ -10,4 +10,5 @@ require (
 	github.com/unrolled/render v1.0.3
 	github.com/unrolled/secure v1.0.8
 	github.com/urfave/negroni v1.0.0
+	github.com/yeqown/go-qrcode v1.5.2
 )

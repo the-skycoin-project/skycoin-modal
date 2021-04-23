@@ -18,15 +18,18 @@
                                 <div class="row">
                                     <div class="col-md-12 ">
                                         <center>
-                                                <img class="media-object dp" src="{{ .Site.Params.QRCode }}" style="width: 256px;height:256px;">
+                                                {{.Site.Params.QRImage | safeHTML}}
                                         </center>
                                     </div>
                                     <div class="col-md-12">
 																			<br>
 																			<p>Payment Address:</p>
                                         <h4>{{.Site.Params.Address | safeHTML}}</h4>
-																				<p>Payment Amount:</p>
-                                        <p>${{.Site.Params.Amount | safeHTML}}</p>
+																				<p>Payment USD Amount:</p>
+                                        <p>${{.Site.Params.UsdAmount | safeHTML}}</p>
+																				<p>Payment SKY Amount:</p>
+																				<p>${{.Site.Params.SkyAmount | safeHTML}}</p>
+
                                         <p>
                                         </p>
 																				{{.Site.Params.IfInvoice | safeHTML}}
