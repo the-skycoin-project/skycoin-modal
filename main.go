@@ -2,6 +2,7 @@ package main
 
 import (
 //	"bytes"
+	"encoding/base64"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -10,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"encoding/json"
+	"math"
 	"github.com/urfave/negroni"
 	"os"
 	"regexp"
@@ -22,7 +24,8 @@ import (
 	"time"
 	_ "github.com/the-skycoin-project/skycoin-modal/statik"
 	"github.com/rakyll/statik/fs"
-	qrcode "github.com/yeqown/go-qrcode"
+	//qrcode "github.com/yeqown/go-qrcode"
+	  qrcode "github.com/skip2/go-qrcode"
 	)
 
 func init() {
@@ -234,12 +237,15 @@ fmt.Println(string(requestDump))
 		appEnv.Render.JSON(w, http.StatusBadRequest, response)
 		return
 	}
+	//fmt.Println(string("response Publictoken: " + p.Publictoken))
 	fmt.Println(string("response Publictoken: " + p.Publictoken))
 
 //request validation step
 // https://docs.snipcart.com/v3/custom-payment-gateway/technical-reference#request
 fmt.Println("Request validation...")
+fmt.Println(string("https://payment.snipcart.com/api/public/custom-payment-gateway/validate?publicToken="+ p.Publictoken))
 	resp, err := http.Get("https://payment.snipcart.com/api/public/custom-payment-gateway/validate?publicToken="+ p.Publictoken)
+//	getJson("https://payment.snipcart.com/api/public/custom-payment-gateway/validate?publicToken="+ p.Publictoken, &resp)
 	if err != nil {
 		 slog.Fatalln(err)
 	}
@@ -279,11 +285,35 @@ var fm = template.FuncMap{
 }
 pmr := PaymentRequest{}
 pmr.Address = "2jBbGxZRGoQG1mqhPBnXnLTxK6oxsTf8os6" //hardcoding genesis address as example
+qrc, err := qrcode.Encode("skycoin:" + pmr.Address, qrcode.Medium, 512)
+if err != nil {
+		fmt.Printf("could not generate QRCode: %v", err)
+	}
+	pmr.QRCode = base64.StdEncoding.EncodeToString(qrc)
 var pricequeryresponse PriceQuery
-getJson("https://api.coinpaprika.com/v1/tickers/sky-skycoin?quotes=USD", &pricequeryresponse)
+//getJson("https://api.coinpaprika.com/v1/tickers/sky-skycoin?quotes=USD", &pricequeryresponse)
+resp1, err := http.Get("https://api.coinpaprika.com/v1/tickers/sky-skycoin?quotes=USD")
+//getJson("https://payment.snipcart.com/api/public/custom-payment-gateway/validate?publicToken="+ slug, &validate)
+if err != nil {
+	 slog.Fatalln(err)
+}
+//We Read the response body on the line below.
+body, err := ioutil.ReadAll(resp1.Body)
+if err != nil {
+	 slog.Fatalln(err)
+} //should do something with body, at least print to screen
+fmt.Println("coinpaprika response:")
+fmt.Println(string(body))
+_ = json.Unmarshal([]byte(body), &pricequeryresponse)
 currentrate := 	pricequeryresponse.Quotes.Usd.Price
+//s := fmt.Sprintf("%.2f", currentrate)
+//fmt.Println(s)
+//fmt.Println("currect rate")
+//fmt.Println(string(s))
 pmr.UsdAmount = 100
-pmr.SkyAmount = pmr.UsdAmount / currentrate
+quoteinsky := pmr.UsdAmount / currentrate
+quoteinsky = math.Floor(quoteinsky*10000)/10000
+pmr.SkyAmount = quoteinsky
 //payment modal
 tpl1 := template.Must(template.New("").Funcs(fm).ParseFiles(wd + "/public/index.html"))
 tpl1.ExecuteTemplate(w, "index.html", pmr)
@@ -311,55 +341,64 @@ func PaymentURL(w http.ResponseWriter, req *http.Request, appEnv AppEnv) {
 	slug := mux.Vars(req)["slug"] //public token provided previously must be validated first
 	fmt.Println(slug)
 	fmt.Println("validating request")
-	var validate PaymentMethods
-	getJson("https://payment.snipcart.com/api/public/custom-payment-gateway/validate?publicToken="+ slug, &validate)
+	//var validate PaymentMethods
+	fmt.Println("Request validation...")
+	fmt.Println(string("https://payment.snipcart.com/api/public/custom-payment-gateway/validate?publicToken="+ slug))
+	resp, err := http.Get("https://payment.snipcart.com/api/public/custom-payment-gateway/validate?publicToken="+ slug)
+	//getJson("https://payment.snipcart.com/api/public/custom-payment-gateway/validate?publicToken="+ slug, &validate)
+	if err != nil {
+		 slog.Fatalln(err)
+	}
+//We Read the response body on the line below.
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		 slog.Fatalln(err)
+} //should do something with body, at least print to screen
+fmt.Println("request validation response:")
+fmt.Println(string(body))
+	fmt.Println("PaymentUrl Request Body:")
+	//var pmrbody string
+	//_ = json.Unmarshal([]byte(validate), &pmrbody)
+	fmt.Println(string(body))
+	//retrieve the payment session
+	pmtsess := PaymentSession{}
+	fmt.Println(string("https://payment.snipcart.com/api/public/custom-payment-gateway/payment-session?publicToken="+ slug))
 
-fmt.Println("PaymentUrl Request Body:")
-//var pmrbody string
-//_ = json.Unmarshal([]byte(validate), &pmrbody)
-fmt.Println(validate)
-//retrieve the payment session
-pmtsess := PaymentSession{}
+	getJson("https://payment.snipcart.com/api/public/custom-payment-gateway/payment-session?publicToken=" + slug, &pmtsess)
+	//getpaymentsession := "https://payment.snipcart.com/api/public/custom-payment-gateway/payment-session?publicToken=" + slug
+	//fmt.Println(string(getpaymentsession))
+	pmtid := pmtsess.ID
+	fmt.Println("Payment ID:")
+	fmt.Println(string(pmtid))
 
-getJson("https://payment.snipcart.com/api/public/custom-payment-gateway/payment-session?publicToken=" + slug, &pmtsess)
-getpaymentsession := "https://payment.snipcart.com/api/public/custom-payment-gateway/payment-session?publicToken=" + slug
-fmt.Println(string(getpaymentsession))
-
-pmtid := pmtsess.ID
-var readableid string
-_ = json.Unmarshal([]byte(pmtid), &readableid)
-
-fmt.Println("Payment ID:")
-
-fmt.Println(string(readableid))
-
-wd, err := os.Getwd()
-if err != nil {
-	 log.Fatal(err)
-}
-var fm = template.FuncMap{	//current time is displayed in the page
-	"fdateMDY": monthDayYear,
-}
-//req.ParseForm()
-//        fmt.Println("txid:", req.Form["txid"])
-pmr := PaymentRequest{}
-pmr.Address = nextAddress()
-qrc, err := qrcode.New("skycoin:" + pmr.Address)
-if err != nil {
-	fmt.Printf("could not generate QRCode: %v", err)
-}
-pmr.QRCode = qrc
-pmr.UsdAmount = pmtsess.Invoice.Amount
-var pricequeryresponse PriceQuery
-//https://api.coinpaprika.com/v1/tickers/sky-skycoin?quotes=USD
-getJson("https://api.coinpaprika.com/v1/tickers/sky-skycoin?quotes=USD", &pricequeryresponse)
-currentrate := 	pricequeryresponse.Quotes.Usd.Price
-
-pmr.SkyAmount = pmtsess.Invoice.Amount / currentrate
-//payment modal
-tpl1 := template.Must(template.New("").Funcs(fm).ParseFiles(wd + "/public/index.html"))
-tpl1.ExecuteTemplate(w, "index.html", pmr)
-/*
+	var readableid string
+	_ = json.Unmarshal([]byte(pmtid), &readableid)
+	fmt.Println(string(readableid))
+	wd, err := os.Getwd()
+	if err != nil {
+		log.Fatal(err)
+	}
+	var fm = template.FuncMap{	//current time is displayed in the page
+		"fdateMDY": monthDayYear,}
+		//req.ParseForm()
+		//        fmt.Println("txid:", req.Form["txid"])
+		pmr := PaymentRequest{}
+		pmr.Address = nextAddress()
+		qrc, err := qrcode.Encode("skycoin:" + pmr.Address, qrcode.Medium, 512)
+		if err != nil {
+				fmt.Printf("could not generate QRCode: %v", err)
+			}
+			pmr.QRCode = base64.StdEncoding.EncodeToString(qrc)
+			pmr.UsdAmount = pmtsess.Invoice.Amount
+			var pricequeryresponse PriceQuery
+			//https://api.coinpaprika.com/v1/tickers/sky-skycoin?quotes=USD
+			getJson("https://api.coinpaprika.com/v1/tickers/sky-skycoin?quotes=USD", &pricequeryresponse)
+			currentrate := 	pricequeryresponse.Quotes.Usd.Price
+			pmr.SkyAmount = pmtsess.Invoice.Amount / currentrate
+			//payment modal
+			tpl1 := template.Must(template.New("").Funcs(fm).ParseFiles(wd + "/public/index.html"))
+			tpl1.ExecuteTemplate(w, "index.html", pmr)
+			/*
 url :=  "https://payment.snipcart.com/api/private/custom-payment-gateway/payment"
 var jsonStr = []byte(`{"paymentSessionId:" pmtid, "state:" "processed", "error:" {"code:" "", "message:" ""} }`)
 req, err = http.NewRequest("POST", url, bytes.NewBuffer(jsonStr))
@@ -378,13 +417,15 @@ req, err = http.NewRequest("POST", url, bytes.NewBuffer(jsonStr))
 }
 var myClient = &http.Client{Timeout: 10 * time.Second}
 func getJson(url string, target interface{}) error {
-    r, err := myClient.Get(url)
+	r, _ := http.NewRequest("GET", url, nil)
+	r.Header.Set("Accept:", "application/json")
+    res, err := myClient.Do(r)
     if err != nil {
         return err
     }
-    defer r.Body.Close()
+    defer res.Body.Close()
 
-    return json.NewDecoder(r.Body).Decode(target)
+    return json.NewDecoder(res.Body).Decode(target)
 }
 
 /*	//to do
@@ -548,7 +589,7 @@ type Payment struct {
 }
 
 type PaymentRequest struct {
-	QRCode *qrcode.QRCode
+	QRCode string //*qrcode.QRCode
 	Address string
 	SkyAmount float64
 	UsdAmount float64
