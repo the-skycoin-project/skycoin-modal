@@ -150,15 +150,15 @@ make sure your skycoin node is running on the default port :6420
 
 ## Testing
 
-Goto your webstore, add some items to your snipcart cart, and proceed throgh the steps unbtil the payment methods are displayed. Verify that the payment method appears, and select it.
+Goto your webstore, add some items to your snipcart cart, and proceed through the steps until the payment methods are displayed. Verify that the payment method appears, and select it.
 
-The skycoin modal is displayed, with the first address found to not have coins. The quote in US dollars is displayed and the payment amount for sky
+The skycoin payment request modal is shown, with the first address found to not have coins. The QR code of this address is also displayed, as well as the quote in US dollars is displayed and the payment amount for sky. Enter a transaction ID (or any numbers) and click submit to be redirected to the order confirmation.
 
 ## TO DO
 
-JWT token validation not working currently
+Revise GUI / branding to exactly match skycoin and remove any unnecessary scripts
 
-Implement QR Code
+Autodetect payment and redirect / remove txid entry
 
 ## Simultaneous Support for Fibercoins
 
