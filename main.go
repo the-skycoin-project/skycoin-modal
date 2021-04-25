@@ -476,10 +476,13 @@ fmt.Println("HTTP Response Status:", resp.StatusCode, http.StatusText(resp.Statu
 					fmt.Println("submit payment response:")
 					fmt.Println(string(body))
 				fmt.Println(string(redir.Returnurl))
-				http.Redirect(w, req, redir.Returnurl, 200)
+				http.Redirect(w, req, redir.Returnurl, http.StatusSeeOther)
+				//tpl1.ExecuteTemplate(w, "index.html", pmr)
+
 				}
-			}
+			} else{
 			tpl1.ExecuteTemplate(w, "index.html", pmr)
+		}
 
 }
 
