@@ -1,7 +1,7 @@
 package main
 
 import (
-//	"bytes"
+	"bytes"
 	"encoding/base64"
 	"fmt"
 	"io/ioutil"
@@ -46,6 +46,7 @@ func main() {
 		env     = strings.ToUpper(os.Getenv("ENV")) // LOCAL, DEV, STG, PRD
 		port    = os.Getenv("PORT")                 // server traffic on this port
 		version = os.Getenv("VERSION")              // path to VERSION file
+		//apikey = os.Getenv("APIKEY")              // api Key
 	)
 	// ===========================================================================
 	// Read version information
@@ -113,7 +114,7 @@ func StartServer(appEnv AppEnv) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	router := mux.NewRouter().StrictSlash(true)
+	router := mux.NewRouter().StrictSlash(true).SkipClean(true).UseEncodedPath()
 	for _, route := range routes {
 		var handler http.Handler
 		handler = MakeHandler(appEnv, route.HandlerFunc)
@@ -179,7 +180,8 @@ var routes = Routes{
 	/*// https://docs.snipcart.com/v3/custom-payment-gateway/technical-reference#payment-methods //*/
 	Route{"PaymentMethods", "POST", "/paywithskycoin", PaymentMethodsURL},	//return payment methods
 	Route{"ModalTest", "GET", "/paywithskycoin", ModalTestURL},	//test view of payment modal
-	Route{"Payment", "GET", "/paywithskycoin/payment/{slug}", PaymentURL},	//payment modal or request page
+	Route{"Payment", "GET", "/paywithskycoin/payment", PaymentURL},	//payment modal or request page with slug = jwt token
+	Route{"Payment", "POST", "/paywithskycoin/payment", PaymentURL},	//payment modal or request page with slug = jwt token
 	/*
 	r := mux.NewRouter().StrictSlash(true)
 	r.HandleFunc("/healthcheck", HealthcheckHandler).Methods("GET")
@@ -217,11 +219,12 @@ func HealthcheckHandler(w http.ResponseWriter, req *http.Request, appEnv AppEnv)
 
 // return payment methods
 func PaymentMethodsURL(w http.ResponseWriter, req *http.Request, appEnv AppEnv) {
+	fmt.Println(string("PaymentMethodsURL Func called"))
 	requestDump, err := httputil.DumpRequest(req, true)
-if err != nil {
-  fmt.Println(err)
-}
-fmt.Println(string(requestDump))
+	if err != nil {
+		fmt.Println(err)
+	}
+	fmt.Println(string(requestDump))
 	decoder := json.NewDecoder(req.Body)
 	var p PaymentMethods
 	err = decoder.Decode(&p)
@@ -231,41 +234,39 @@ fmt.Println(string(requestDump))
 			Message: "malformed PaymentMethods request object",
 		}
 		slog.WithFields(slog.Fields{
-			"env":    appEnv.Env,
-			"status": http.StatusBadRequest,
+		"env":    appEnv.Env,
+		"status": http.StatusBadRequest,
 		}).Error("malformed PaymentMethods request object")
 		appEnv.Render.JSON(w, http.StatusBadRequest, response)
 		return
 	}
-	//fmt.Println(string("response Publictoken: " + p.Publictoken))
-	fmt.Println(string("response Publictoken: " + p.Publictoken))
-
-//request validation step
-// https://docs.snipcart.com/v3/custom-payment-gateway/technical-reference#request
-fmt.Println("Request validation...")
-fmt.Println(string("https://payment.snipcart.com/api/public/custom-payment-gateway/validate?publicToken="+ p.Publictoken))
+	fmt.Println(string("Request Publictoken: " + p.Publictoken))
+	//request validation step
+	// https://docs.snipcart.com/v3/custom-payment-gateway/technical-reference#request
+	fmt.Println("Request validation...")
+	fmt.Println(string("https://payment.snipcart.com/api/public/custom-payment-gateway/validate?publicToken="+ p.Publictoken))
 	resp, err := http.Get("https://payment.snipcart.com/api/public/custom-payment-gateway/validate?publicToken="+ p.Publictoken)
-//	getJson("https://payment.snipcart.com/api/public/custom-payment-gateway/validate?publicToken="+ p.Publictoken, &resp)
+	//	getJson("https://payment.snipcart.com/api/public/custom-payment-gateway/validate?publicToken="+ p.Publictoken, &resp)
 	if err != nil {
-		 slog.Fatalln(err)
+		slog.Fatalln(err)
 	}
-//We Read the response body on the line below.
+	fmt.Println("HTTP Response Status:", resp.StatusCode, http.StatusText(resp.StatusCode))
+	//We Read the response body on the line below.
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		 slog.Fatalln(err)
-} //should do something with body, at least print to screen
-fmt.Println("request validation response:")
-fmt.Println(string(body))
-// fill in the struct with the response
-pmr1 := make([]PaymentMethodsResponseStruct, 0)
-pmr := PaymentMethodsResponseStruct{}
-pmr.ID = "skycoin_payment"
-pmr.Name = "Skycoin"
-pmr.Checkouturl = CheckOutUrl + p.Publictoken
-pmr1 = append(pmr1, pmr)
-pmr2, _ := json.Marshal(pmr)
+		slog.Fatalln(err)
+		} //should do something with body, at least print to screen
+	fmt.Println("request validation response:")
+	fmt.Println(string(body)) // nothing here ??
+	// fill in the struct with the response
+	pmr1 := make([]PaymentMethodsResponseStruct, 0)
+	pmr := PaymentMethodsResponseStruct{}
+	pmr.ID = "skycoin_payment"
+	pmr.Name = "Skycoin"
+	pmr.Checkouturl = CheckOutUrl //+ p.Publictoken //they actually append a new public token on their end to the URL provided
+	pmr1 = append(pmr1, pmr)
+	pmr2, _ := json.Marshal(pmr)
 	fmt.Println(string(pmr2))
-
 	appEnv.Render.JSON(w, http.StatusOK, pmr1)
 }
 
@@ -310,15 +311,22 @@ currentrate := 	pricequeryresponse.Quotes.Usd.Price
 //fmt.Println(s)
 //fmt.Println("currect rate")
 //fmt.Println(string(s))
-pmr.UsdAmount = 100
+pmr.UsdAmount = 100.00
 quoteinsky := pmr.UsdAmount / currentrate
-quoteinsky = math.Floor(quoteinsky*10000)/10000
+if currentrate < 10.0 { //adapt the precision to the current rate
+	quoteinsky = math.Floor(quoteinsky*1000)/1000
+} else {
+	quoteinsky = math.Floor(quoteinsky*10000)/10000
+}
+
+//quoteinsky = math.Floor(quoteinsky*10000)/10000
 pmr.SkyAmount = quoteinsky
 //payment modal
 tpl1 := template.Must(template.New("").Funcs(fm).ParseFiles(wd + "/public/index.html"))
 tpl1.ExecuteTemplate(w, "index.html", pmr)
 
 /*
+//generate payment
 url :=  "https://payment.snipcart.com/api/private/custom-payment-gateway/payment"
 var jsonStr = []byte(`{"paymentSessionId:" pmtid, "state:" "processed", "error:" {"code:" "", "message:" ""} }`)
 req, err = http.NewRequest("POST", url, bytes.NewBuffer(jsonStr))
@@ -337,51 +345,61 @@ req, err = http.NewRequest("POST", url, bytes.NewBuffer(jsonStr))
 }
 
 // here is the payment request	// url slug is the token
+// expecting GET
 func PaymentURL(w http.ResponseWriter, req *http.Request, appEnv AppEnv) {
-	slug := mux.Vars(req)["slug"] //public token provided previously must be validated first
-	fmt.Println(slug)
-	fmt.Println("validating request")
-	//var validate PaymentMethods
-	fmt.Println("Request validation...")
-	fmt.Println(string("https://payment.snipcart.com/api/public/custom-payment-gateway/validate?publicToken="+ slug))
-	resp, err := http.Get("https://payment.snipcart.com/api/public/custom-payment-gateway/validate?publicToken="+ slug)
-	//getJson("https://payment.snipcart.com/api/public/custom-payment-gateway/validate?publicToken="+ slug, &validate)
-	if err != nil {
-		 slog.Fatalln(err)
-	}
-//We Read the response body on the line below.
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		 slog.Fatalln(err)
-} //should do something with body, at least print to screen
+	fmt.Println(string("PaymentURL Func called"))
+	//URL, _ := url.PathUnescape(req.URL.RequestURI())
+	//ext := xurls.Strict().FindAllString(URL, -1)
+	//fmt.Fprintf(w, "Full path is: ", ext)
+//	for k, v := range req.Header {
+//		fmt.Print(k)
+//		fmt.Print(" : ")
+//		fmt.Println(v)
+//	}
+slug := req.URL.RawQuery
+	//slug := mux.Vars(req)["slug"] //public token provided previously must be validated first
+
+//
+fmt.Println(string("Request Publictoken / URL Slug: "))
+fmt.Println(string(slug))
+//request validation step
+// https://docs.snipcart.com/v3/custom-payment-gateway/technical-reference#request
+fmt.Println("Request validation...")
+fmt.Println(string("https://payment.snipcart.com/api/public/custom-payment-gateway/validate?"+ slug))
+resp, err := http.Get("https://payment.snipcart.com/api/public/custom-payment-gateway/validate?"+ slug)
+//	getJson("https://payment.snipcart.com/api/public/custom-payment-gateway/validate?publicToken="+ p.Publictoken, &resp)
+if err != nil {
+	slog.Fatalln(err)
+}
 fmt.Println("request validation response:")
-fmt.Println(string(body))
-	fmt.Println("PaymentUrl Request Body:")
-	//var pmrbody string
-	//_ = json.Unmarshal([]byte(validate), &pmrbody)
-	fmt.Println(string(body))
+fmt.Println("HTTP Response Status:", resp.StatusCode, http.StatusText(resp.StatusCode))
+//
 	//retrieve the payment session
 	pmtsess := PaymentSession{}
-	fmt.Println(string("https://payment.snipcart.com/api/public/custom-payment-gateway/payment-session?publicToken="+ slug))
-
-	getJson("https://payment.snipcart.com/api/public/custom-payment-gateway/payment-session?publicToken=" + slug, &pmtsess)
-	//getpaymentsession := "https://payment.snipcart.com/api/public/custom-payment-gateway/payment-session?publicToken=" + slug
-	//fmt.Println(string(getpaymentsession))
-	pmtid := pmtsess.ID
-	fmt.Println("Payment ID:")
-	fmt.Println(string(pmtid))
-
-	var readableid string
-	_ = json.Unmarshal([]byte(pmtid), &readableid)
-	fmt.Println(string(readableid))
-	wd, err := os.Getwd()
+	fmt.Println(string("Retrieving payment session..."))
+	fmt.Println(string("https://payment.snipcart.com/api/public/custom-payment-gateway/payment-session?"+ slug))
+	resp1, err := http.Get("https://payment.snipcart.com/api/public/custom-payment-gateway/payment-session?"+ slug)
+	//	getJson("https://payment.snipcart.com/api/public/custom-payment-gateway/validate?publicToken="+ p.Publictoken, &resp)
 	if err != nil {
-		log.Fatal(err)
+		slog.Fatalln(err)
 	}
+	defer resp1.Body.Close()
+
+ decoder := json.NewDecoder(resp1.Body)
+ err = decoder.Decode(&pmtsess)
+ if err != nil {
+	 slog.Fatalln(err)
+	}
+	fmt.Println("HTTP Response Status:", resp1.StatusCode, http.StatusText(resp1.StatusCode))
+	fmt.Println(string("PaymentSession ID: " + pmtsess.ID))
+	fmt.Println("PaymentSession Amount:")
+	fmt.Sprintf("$%.2f", pmtsess.Invoice.Amount)
+
+	//
 	var fm = template.FuncMap{	//current time is displayed in the page
 		"fdateMDY": monthDayYear,}
 		//req.ParseForm()
-		//        fmt.Println("txid:", req.Form["txid"])
+		//        fmt.Println("stringtxid:", req.Form["txid"])
 		pmr := PaymentRequest{}
 		pmr.Address = nextAddress()
 		qrc, err := qrcode.Encode("skycoin:" + pmr.Address, qrcode.Medium, 512)
@@ -389,32 +407,88 @@ fmt.Println(string(body))
 				fmt.Printf("could not generate QRCode: %v", err)
 			}
 			pmr.QRCode = base64.StdEncoding.EncodeToString(qrc)
+			//fmt.Printf("%+v\n", pmtsess)
 			pmr.UsdAmount = pmtsess.Invoice.Amount
 			var pricequeryresponse PriceQuery
 			//https://api.coinpaprika.com/v1/tickers/sky-skycoin?quotes=USD
-			getJson("https://api.coinpaprika.com/v1/tickers/sky-skycoin?quotes=USD", &pricequeryresponse)
+			resp2, err := http.Get("https://api.coinpaprika.com/v1/tickers/sky-skycoin?quotes=USD")
+			//getJson("https://payment.snipcart.com/api/public/custom-payment-gateway/validate?publicToken="+ slug, &validate)
+			if err != nil {
+				 slog.Fatalln(err)
+			}
+			//We Read the response body on the line below.
+			body, err := ioutil.ReadAll(resp2.Body)
+			if err != nil {
+				 slog.Fatalln(err)
+			} //should do something with body, at least print to screen
+			fmt.Println("coinpaprika response:")
+			fmt.Println(string(body))
+			_ = json.Unmarshal([]byte(body), &pricequeryresponse)
 			currentrate := 	pricequeryresponse.Quotes.Usd.Price
-			pmr.SkyAmount = pmtsess.Invoice.Amount / currentrate
+			quoteinsky := pmtsess.Invoice.Amount / currentrate
+			if currentrate < 10.0 { //adapt precision to the current rate
+				quoteinsky = math.Floor(quoteinsky*1000)/1000
+			} else {
+				quoteinsky = math.Floor(quoteinsky*10000)/10000
+		}
+
+			pmr.SkyAmount = quoteinsky
+//			pmr.SkyAmount = pmtsess.Invoice.Amount / currentrate
 			//payment modal
+			wd, err := os.Getwd()
+			if err != nil {
+				log.Fatal(err)
+			}
 			tpl1 := template.Must(template.New("").Funcs(fm).ParseFiles(wd + "/public/index.html"))
+
+			if req.Method != http.MethodGet {
+			fmt.Println(string("Submitting Payment"))
+			txid := req.FormValue("txid")
+			if txid != "" {
+				fmt.Println(string("txid:"))
+				fmt.Println(string(txid))
+				//post request for payment
+				fmt.Println(fmt.Sprintf(`curl --request POST --url https://payment.snipcart.com/api/private/custom-payment-gateway/payment --header 'Authorization: Bearer %s' --header 'content-type: application/json' --data '{"paymentSessionId": "%s", "state": "processed", "error": ""}'`, os.Getenv("APIKEY"), pmtsess.ID))
+				url :=  "https://payment.snipcart.com/api/private/custom-payment-gateway/payment"
+				postdata := fmt.Sprintf(`{"paymentSessionId": "%s", "state": "processed", "error": ""}`, pmtsess.ID)
+				var jsonStr = []byte(postdata)
+				req0, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonStr))
+				req0.Header.Set("Authorization", "Bearer " + os.Getenv("APIKEY"))
+				req0.Header.Set("Content-Type", "application/json")
+				resp, err := myClient.Do(req0)
+				if err != nil {
+					slog.Fatalln(err)
+				}
+				defer resp.Body.Close()
+				var redir PaymentConfirmation
+				decoder := json.NewDecoder(resp.Body)
+				err = decoder.Decode(&redir)
+				if err != nil {
+					slog.Fatalln(err)
+				 }
+				 fmt.Println("HTTP Response Status:", resp.StatusCode, http.StatusText(resp.StatusCode))
+
+				//fmt.Println(string(resp))
+				body, err := ioutil.ReadAll(resp.Body)
+				if err != nil {
+					slog.Fatalln(err)
+					} //should do something with body, at least print to screen
+					fmt.Println("submit payment response:")
+					fmt.Println(string(body))
+				fmt.Println(string(redir.Returnurl))
+				http.Redirect(w, req, redir.Returnurl, 200)
+				}
+			}
 			tpl1.ExecuteTemplate(w, "index.html", pmr)
-			/*
-url :=  "https://payment.snipcart.com/api/private/custom-payment-gateway/payment"
-var jsonStr = []byte(`{"paymentSessionId:" pmtid, "state:" "processed", "error:" {"code:" "", "message:" ""} }`)
-req, err = http.NewRequest("POST", url, bytes.NewBuffer(jsonStr))
-  req.Header.Set("Authorization", "Bearer <YOUR_SECRET_API_KEY>")
-	req.Header.Set("Content-Type", "application/json")
-	//resp, err = http.Get("")
-	if err != nil {
-		 slog.Fatalln(err)
-	}
-//We Read the response body on the line below.
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		 slog.Fatalln(err)
+
 }
-*/
-}
+
+//func SubmitPayment(w http.ResponseWriter, req *http.Request, appEnv AppEnv) {
+//}
+
+
+
+
 var myClient = &http.Client{Timeout: 10 * time.Second}
 func getJson(url string, target interface{}) error {
 	r, _ := http.NewRequest("GET", url, nil)
@@ -460,6 +534,7 @@ func SubmitPaymentURL(w http.ResponseWriter, req *http.Request, appEnv AppEnv) {
 */
 
 func nextAddress() string {
+	fmt.Println(string("Checking for next available address"))
 	file, _ := ioutil.ReadFile("addresses.txt")
 	notfound := "address not found"
 	addresses := AddressList{}
@@ -468,18 +543,37 @@ func nextAddress() string {
 	_ = json.Unmarshal([]byte(file), &addresses)
 	for i := 0; i < len(addresses.Addresses); i++ {
 		if address == notfound {
-			var q CurrentBalance //the struct that maps to the response of the query
+			var q Balance //the struct that maps to the response of the query
 			testaddress = addresses.Addresses[i]
-			getJson("http://127.0.0.1:8001/api/CurrentBalance?addrs="+ testaddress, &q)
+
+			fmt.Println(string("Checking Addresses..."))
+			fmt.Println(string("http://127.0.0.1:8001/api/balance?addrs="+ testaddress))
+			resp1, err := http.Get("http://127.0.0.1:8001/api/balance?addrs="+ testaddress)
+			//	getJson("https://payment.snipcart.com/api/public/custom-payment-gateway/validate?publicToken="+ p.Publictoken, &resp)
+			if err != nil {
+				slog.Fatalln(err)
+			}
+			defer resp1.Body.Close()
+
+		 decoder := json.NewDecoder(resp1.Body)
+		 err = decoder.Decode(&q)
+		 if err != nil {
+			 slog.Fatalln(err)
+			}
+			fmt.Println("HTTP Response Status:", resp1.StatusCode, http.StatusText(resp1.StatusCode))
+			//fmt.Println(string("PaymentSession ID: " + pmtsess.ID))
+			//fmt.Println("PaymentSession Amount:")
+			//fmt.Sprintf("$%.2f", pmtsess.Invoice.Amount)
 			//resp, err := http.Get("http://127.0.0.1:8001/api/CurrentBalance?addrs="+ addresses.Addresses[i] )	//quey the address balance
 			fmt.Println("Address")
 			fmt.Println(string(testaddress))
-			//fmt.Println(string("Head Outputs: %s", q.HeadOutputs.Coins))
-			if q.HeadOutputs == nil {
-				fmt.Println(string("Address is empty, Using:"))
+			//fmt.Println(string("Head Outputs:"))
+			fmt.Println(string("currentCoins"))
+			fmt.Println(q.Confirmed.Coins)
+			if q.Confirmed.Coins == 0 {
+			fmt.Println(string("Address is empty, Using:"))
 				fmt.Println(string(testaddress))
 				address = testaddress
-				fmt.Println(address)
 				return address
 			}
 		}
@@ -487,8 +581,8 @@ func nextAddress() string {
 return address
 }
 
-var AppUrl string = "https://pay.magnetosphere.net/paywithskycoin/" // return payment methods
-var CheckOutUrl string = "https://pay.magnetosphere.net/paywithskycoin/payment/"	// payment modal
+var AppUrl string = "https://pay.magnetosphere.net/paywithskycoin" // return payment methods
+var CheckOutUrl string = "https://pay.magnetosphere.net/paywithskycoin/payment"	// payment modal
 //var PaymentUrl string = "https://magnetosphere.net/paywithskycoin/payment/confirm"	// post req here with txid
 
 	type PaymentMethods struct {	// bad name for this func
@@ -541,7 +635,7 @@ type PaymentMethodsResponse struct {
 	Iconurl     string `json:"iconUrl,omitempty"`
 }
 
-	type PaymentSession struct {
+type PaymentSession struct {
 	Invoice struct {
 		Shippingaddress struct {
 			Name            string      `json:"name"`
@@ -549,6 +643,7 @@ type PaymentMethodsResponse struct {
 			Postalcode      string      `json:"postalCode"`
 			Country         string      `json:"country"`
 			City            string      `json:"city"`
+			Surname         interface{} `json:"surname"`
 			Region          interface{} `json:"region"`
 		} `json:"shippingAddress"`
 		Billingaddress struct {
@@ -557,6 +652,7 @@ type PaymentMethodsResponse struct {
 			Postalcode      string      `json:"postalCode"`
 			Country         string      `json:"country"`
 			City            string      `json:"city"`
+			Surname         interface{} `json:"surname"`
 			Region          interface{} `json:"region"`
 		} `json:"billingAddress"`
 		Email    string  `json:"email"`
@@ -569,14 +665,36 @@ type PaymentMethodsResponse struct {
 			Unitprice                float64 `json:"unitPrice"`
 			Quantity                 int     `json:"quantity"`
 			Type                     string  `json:"type"`
-			Rateoftaxincludedinprice int     `json:"rateOfTaxIncludedInPrice"`
+			Discountamount           float64 `json:"discountAmount"`
+			Rateoftaxincludedinprice float64 `json:"rateOfTaxIncludedInPrice"`
 			Amount                   float64 `json:"amount"`
+			Hasselectedplan          bool    `json:"hasSelectedPlan"`
 		} `json:"items"`
+		Plan interface{} `json:"plan"`
 	} `json:"invoice"`
+	State                   string `json:"state"`
+	Availablepaymentmethods []struct {
+		ID          string `json:"id"`
+		Flow        string `json:"flow"`
+		Fingerprint string `json:"fingerprint"`
+		Name        string `json:"name,omitempty"`
+		Checkouturl string `json:"checkoutUrl,omitempty"`
+	} `json:"availablePaymentMethods"`
 	ID                              string `json:"id"`
+	Paymentmethod                   string `json:"paymentMethod"`
 	Paymentauthorizationredirecturl string `json:"paymentAuthorizationRedirectUrl"`
+	Authorization                   struct {
+		Flow                      string      `json:"flow"`
+		Confirmationsynchronicity string      `json:"confirmationSynchronicity"`
+		State                     string      `json:"state"`
+		Statedescriptorcode       interface{} `json:"stateDescriptorCode"`
+		Statedescriptor           interface{} `json:"stateDescriptor"`
+		URL                       string      `json:"url"`
+		Card                      interface{} `json:"card"`
+	} `json:"authorization"`
+	Customerid        interface{} `json:"customerId"`
+	Customergatewayid interface{} `json:"customerGatewayId"`
 }
-
 
 //sent as post request to snipcart to rgister payment in dashboard
 type Payment struct {
@@ -586,6 +704,10 @@ type Payment struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
 	} `json:"error"`
+}
+
+type PaymentConfirmation struct {
+	Returnurl string `json:"returnUrl"`
 }
 
 type PaymentRequest struct {
@@ -600,15 +722,38 @@ type PaymentRequest struct {
 type AddressList struct {
 	Addresses []string `json:"addresses"`
 }
+
+type Balance struct {
+	Confirmed struct {
+		Coins int `json:"coins"`
+		Hours int `json:"hours"`
+	} `json:"confirmed"`
+	Predicted struct {
+		Coins int `json:"coins"`
+		Hours int `json:"hours"`
+	} `json:"predicted"`
+	Addresses struct {
+		SevenCpq7T3Pzzxvjtst8G7Uvs7Xh4Lem8Fbpd struct {
+			Confirmed struct {
+				Coins int `json:"coins"`
+				Hours int `json:"hours"`
+			} `json:"confirmed"`
+			Predicted struct {
+				Coins int `json:"coins"`
+				Hours int `json:"hours"`
+			} `json:"predicted"`
+		} `json:"7cpQ7t3PZZXvjTst8G7Uvs7XH4LeM8fBPD"`
+	} `json:"addresses"`
+}
 // https://explorer.skycoin.com/api.html
 // /api/currentBalance?addrs=SeDoYN6SNaTiAZFHwArnFwQmcyz7ZvJm17,iqi5BpPhEqt35SaeMLKA94XnzBG57hToNi
 type CurrentBalance struct {
 	Head struct {
-		Seq               int    `json:"seq"`
+		Seq               int64    `json:"seq"`
 		BlockHash         string `json:"block_hash"`
 		PreviousBlockHash string `json:"previous_block_hash"`
 		Timestamp         int    `json:"timestamp"`
-		Fee               int    `json:"fee"`
+		Fee               int64    `json:"fee"`
 		Version           int    `json:"version"`
 		TxBodyHash        string `json:"tx_body_hash"`
 		UxHash            string `json:"ux_hash"`
@@ -616,12 +761,12 @@ type CurrentBalance struct {
 	HeadOutputs []struct {
 		Hash            string `json:"hash"`
 		Time            int    `json:"time"`
-		BlockSeq        int    `json:"block_seq"`
+		BlockSeq        int64    `json:"block_seq"`
 		SrcTx           string `json:"src_tx"`
 		Address         string `json:"address"`
 		Coins           string `json:"coins"`
-		Hours           int    `json:"hours"`
-		CalculatedHours int    `json:"calculated_hours"`
+		Hours           float64    `json:"hours"`
+		CalculatedHours int64    `json:"calculated_hours"`
 	} `json:"head_outputs"`
 	OutgoingOutputs []interface{} `json:"outgoing_outputs"`
 	IncomingOutputs []interface{} `json:"incoming_outputs"`
@@ -690,6 +835,7 @@ func (c *Check) GoString() string {
 type Response struct {
 	Status  string `json:"status"`
 	Message string `json:"message"`
+	URL string `json:"url"`
 }
 
 // GoString implements the GoStringer interface so we can display the full struct during debugging

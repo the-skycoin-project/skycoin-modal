@@ -17,26 +17,29 @@
                             <div class="panel-body text-center">
                                 <div class="row">
                                     <div class="col-md-12 ">
+																			<h1>Skycoin</h1>
                                         <center>
                                                 {{.Site.Params.QRImage | safeHTML}}
                                         </center>
                                     </div>
                                     <div class="col-md-12">
 																			<br>
-																			<p>Payment Address:</p>
+																			<p>Payment Address:        </p>
                                         <h4>{{.Site.Params.Address | safeHTML}}</h4>
-																				<p>Payment USD Amount:</p>
+																				<p>USD Amount:          </p>
                                         <p>${{.Site.Params.UsdAmount | safeHTML}}</p>
-																				<p>Payment SKY Amount:</p>
-																				<p>${{.Site.Params.SkyAmount | safeHTML}}</p>
+																				<p>SKY Amount:          </p>
+																				<p>SKY: {{.Site.Params.SkyAmount | safeHTML}}</p>
 
                                         <p>
                                         </p>
-																				{{.Site.Params.IfInvoice | safeHTML}}
-                                        <p class="description">
-                                        {{.Site.Params.Invoice | safeHTML}}
-                                        </p>
-																				{{.Site.Params.end | safeHTML}}
+
+																				<p></p>
+																				<form method="POST">
+																					<label>txid:</label><br />
+																					<textarea name="txid"></textarea><br />
+																					<input type="submit">
+																				</form>
                                     </div>
                                 </div>
                             </div>
