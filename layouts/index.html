@@ -17,7 +17,7 @@
                             <div class="panel-body text-center">
                                 <div class="row">
                                     <div class="col-md-12 ">
-																			<h1>Skycoin</h1>
+																			<h1>{{.Site.Params.Name | safeHTML}}</h1>
                                         <center>
                                                 {{.Site.Params.QRImage | safeHTML}}
                                         </center>
@@ -26,19 +26,17 @@
 																			<br>
 																			<p>Payment Address:        </p>
                                         <h4>{{.Site.Params.Address | safeHTML}}</h4>
-																				<p>USD Amount:          </p>
-                                        <p>${{.Site.Params.UsdAmount | safeHTML}}</p>
-																				<p>SKY Amount:          </p>
-																				<p>SKY: {{.Site.Params.SkyAmount | safeHTML}}</p>
-
-                                        <p>
-                                        </p>
-
+																				<p>USD Amount: . . . . . . . . . ${{.Site.Params.UsdAmount | safeHTML}}</p>
+                                        <p></p>
+																				<p>{{.Site.Params.Ticker | safeHTML}} Amount: . . . . . . . . . {{.Site.Params.SkyAmount | safeHTML}}</p>
 																				<p></p>
+																				<p>please specify a refund address and the transaction ID</p>
 																				<form method="POST">
-																					<label>txid:</label><br />
+																					<label>Transaction ID: </label><!-- <br /> -->
 																					<textarea name="txid"></textarea><br />
-																					<input type="submit">
+																					<label>refund address:</label><!-- <br /> -->
+																					<textarea name="refund"></textarea><br />
+																					<input type="submit" value="submit payment">
 																				</form>
                                     </div>
                                 </div>
