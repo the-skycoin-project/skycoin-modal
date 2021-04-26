@@ -115,10 +115,13 @@ var routes = Routes{
 	/*// https://docs.snipcart.com/v3/custom-payment-gateway/technical-reference //*/
 	Route{"PaymentMethods", "POST", "/paywithskycoin", PaymentMethodsURL},	//return payment methods
 	Route{"ModalTest", "GET", "/paywithskycoin", ModalTestURL},	//test view of payment modal
+	Route{"ModalTest", "GET", "/paywithness", NessModalTestURL},	//test view of payment modal
 	Route{"Payment", "GET", "/paywithskycoin/payment", PaymentURL},	//payment modal or request page
 	Route{"Payment", "POST", "/paywithskycoin/payment", PaymentURL},	//payment modal or request page
 	Route{"Payment", "GET", "/paywithbitcoin", BTCPaymentURL},
-	Route{"Payment", "Post", "/paywithbitcoin", BTCPaymentURL},
+	Route{"Payment", "POST", "/paywithbitcoin", BTCPaymentURL},
+	Route{"Payment", "GET", "/paywithprivateness", NessPaymentURL},
+	Route{"Payment", "POST", "/paywithprivateness", NessPaymentURL},
 }
 // HandlerFunc is a custom implementation of the http.HandlerFunc
 type HandlerFunc func(http.ResponseWriter, *http.Request, AppEnv)
@@ -171,6 +174,13 @@ func PaymentMethodsURL(w http.ResponseWriter, req *http.Request, appEnv AppEnv) 
 	pmr0 = append(pmr0, pmr2)
 	pmr02, _ := json.Marshal(pmr2)
 	fmt.Println(string(pmr02))
+	pmr3 := PaymentMethodsResponseStruct{}
+	pmr3.ID = "privateness_payment"
+	pmr3.Name = "Privateness"
+	pmr3.Checkouturl = NessCheckOutUrl //+ p.Publictoken //they actually append a new public token on their end to the URL provided
+	pmr0 = append(pmr0, pmr3)
+	pmr03, _ := json.Marshal(pmr3)
+	fmt.Println(string(pmr03))
 	appEnv.Render.JSON(w, http.StatusOK, pmr0)
 }
 //time function embedded in the page
@@ -189,6 +199,37 @@ func ModalTestURL(w http.ResponseWriter, req *http.Request, appEnv AppEnv) {	//s
 	pmtreq.QRCode = base64.StdEncoding.EncodeToString(qrc)
 	var pricequeryresponse PriceQuery
 	resp1, err := http.Get("https://api.coinpaprika.com/v1/tickers/sky-skycoin?quotes=USD")
+	if err != nil {slog.Fatalln(err)}
+	body, err := ioutil.ReadAll(resp1.Body)	// Read the response body
+	if err != nil {slog.Fatalln(err)}
+	fmt.Println(string("coinpaprika response:"))
+	fmt.Println(body)
+	_ = json.Unmarshal([]byte(body), &pricequeryresponse)
+	currentrate := 	pricequeryresponse.Quotes.Usd.Price
+	fmt.Println(string("currect rate"))
+	s := fmt.Sprintf("%.2f", currentrate)
+	fmt.Println(string(s))
+	pmtreq.UsdAmount = 100.00
+	quoteinsky := pmtreq.UsdAmount / currentrate
+	if currentrate < 10.0 { quoteinsky = math.Floor(quoteinsky*1000)/1000	} else {	quoteinsky = math.Floor(quoteinsky*10000)/10000	}	//adapt the precision to the current rate
+	pmtreq.Amount = quoteinsky
+	tpl1 := template.Must(template.New("").Funcs(fm).ParseFiles(wd + "/public/index.html"))
+	tpl1.ExecuteTemplate(w, "index.html", pmtreq)	//payment modal
+}
+
+func NessModalTestURL(w http.ResponseWriter, req *http.Request, appEnv AppEnv) {	//same as paymentmethodsURL endpoint but handles GET
+	wd, err := os.Getwd()
+	if err != nil {log.Fatal(err)}
+	var fm = template.FuncMap{"fdateMDY": monthDayYear,}
+	pmtreq := PaymentRequest{}
+	pmtreq.CryptoName = "Privateness"
+	pmtreq.Ticker = "NESS"
+	pmtreq.Address = "24GJTLPMoz61sV4J4qg1n14x5qqDwXqyJJy" //hardcoding genesis address as example
+	qrc, err := qrcode.Encode("privateness:" + pmtreq.Address, qrcode.Medium, 512)
+	if err != nil {fmt.Printf("could not generate QRCode: %v", err)}
+	pmtreq.QRCode = base64.StdEncoding.EncodeToString(qrc)
+	var pricequeryresponse PriceQuery
+	resp1, err := http.Get("https://api.coinpaprika.com/v1/tickers/ness-privateness?quotes=USD")
 	if err != nil {slog.Fatalln(err)}
 	body, err := ioutil.ReadAll(resp1.Body)	// Read the response body
 	if err != nil {slog.Fatalln(err)}
@@ -249,7 +290,7 @@ func PaymentURL(w http.ResponseWriter, req *http.Request, appEnv AppEnv) {
 	pmtreq.CryptoName = "Skycoin"
 	pmtreq.Ticker = "SKY"
 	pmtreq.Amount = quoteinsky
-	pmtreq.Address = nextAddress()	//get next address
+	pmtreq.Address = nextSkyAddress()	//get next address
 	qrc, err := qrcode.Encode("skycoin:" + pmtreq.Address, qrcode.Medium, 512)	//qr encode the address
 	if err != nil {fmt.Printf("could not generate QRCode: %v", err)}
 	pmtreq.QRCode = base64.StdEncoding.EncodeToString(qrc)
@@ -359,12 +400,97 @@ func BTCPaymentURL(w http.ResponseWriter, req *http.Request, appEnv AppEnv) {
 } else {tpl1.ExecuteTemplate(w, "index.html", pmtreq)}
 
 }
+// payment request // expecting GET
+func NessPaymentURL(w http.ResponseWriter, req *http.Request, appEnv AppEnv) {
+	slug := req.URL.RawQuery	//slug := mux.Vars(req)["slug"] //public token provided previously must be validated first
+	fmt.Println(string("Request Publictoken"))
+	fmt.Println(string(slug))
+	fmt.Println(string("Request validation..."))	//request validation step	// https://docs.snipcart.com/v3/custom-payment-gateway/technical-reference#request
+	fmt.Println(string("https://payment.snipcart.com/api/public/custom-payment-gateway/validate?"+ slug))
+	resp, err := http.Get("https://payment.snipcart.com/api/public/custom-payment-gateway/validate?"+ slug)
+	if err != nil {	slog.Fatalln(err)	}	//fmt.Println(string("request validation response:")
+	fmt.Println("HTTP Response Status:", resp.StatusCode, http.StatusText(resp.StatusCode))
+	pmtsess := PaymentSession{}
+	fmt.Println(string("Retrieving payment session..."))	//retrieve the payment session //https://docs.snipcart.com/v3/custom-payment-gateway/technical-reference#retrieve-a-payment-session
+	fmt.Println(string("https://payment.snipcart.com/api/public/custom-payment-gateway/payment-session?"+ slug))
+	resp1, err := http.Get("https://payment.snipcart.com/api/public/custom-payment-gateway/payment-session?"+ slug)
+	if err != nil {	slog.Fatalln(err)	}
+	defer resp1.Body.Close()
+	decoder := json.NewDecoder(resp1.Body)
+	err = decoder.Decode(&pmtsess)
+	if err != nil { slog.Fatalln(err)	}
+	fmt.Println("HTTP Response Status:", resp1.StatusCode, http.StatusText(resp1.StatusCode)) //response status
+	fmt.Println(string("PaymentSession ID: " + pmtsess.ID)) //print payyment session ID to terminal
+	printamount := fmt.Sprintf("$%.2f", pmtsess.Invoice.Amount)
+	fmt.Println(string("PaymentSession Amount: " + printamount))
+	//fmt.Println(string(fmt.Sprintf("$%.2f", pmtsess.Invoice.Amount)))	//print amount
+	var fm = template.FuncMap{"fdateMDY": monthDayYear,} //current time is displayed in the page
+	var pricequeryresponse PriceQuery
+	resp2, err := http.Get("https://api.coinpaprika.com/v1/tickers/ness-privateness?quotes=USD")
+	if err != nil {slog.Fatalln(err)}
+	body, err := ioutil.ReadAll(resp2.Body)	// Read the response body
+	if err != nil {slog.Fatalln(err)}
+	//fmt.Println(string("coinpaprika response:"))
+	//fmt.Println(string(body))
+	_ = json.Unmarshal([]byte(body), &pricequeryresponse)
+	currentrate := 	pricequeryresponse.Quotes.Usd.Price
+	fmt.Println(string("currect rate"))
+	s := fmt.Sprintf("%.2f", currentrate)
+	fmt.Println(string(s))
+	quoteinness := pmtsess.Invoice.Amount / currentrate
+	if currentrate < 10.0 {	quoteinness = math.Floor(quoteinness*1000)/1000	} else {	quoteinness = math.Floor(quoteinness*10000)/10000 }	//adapt precision to the current rate
+	pmtreq := PaymentRequest{}
+	pmtreq.CryptoName = "Privateness"
+	pmtreq.Ticker = "NESS"
+	pmtreq.Amount = quoteinness
+	pmtreq.Address = nextNessAddress()	//get next address
+	qrc, err := qrcode.Encode("privateness:" + pmtreq.Address, qrcode.Medium, 512)	//qr encode the address
+	if err != nil {fmt.Printf("could not generate QRCode: %v", err)}
+	pmtreq.QRCode = base64.StdEncoding.EncodeToString(qrc)
+	pmtreq.UsdAmount = pmtsess.Invoice.Amount
+	wd, err := os.Getwd()
+	if err != nil {log.Fatal(err)}
+	tpl1 := template.Must(template.New("").Funcs(fm).ParseFiles(wd + "/public/index.html"))
+	if req.Method != http.MethodGet {	//check for post as defined below and in the template
+		fmt.Println(string("Submitting Payment"))	//replace this stuff with autodetection of payment
+		txid := req.FormValue("txid")
+		refund := req.FormValue("refund")
+		if txid != "" {
+			fmt.Println(string("txid:"))
+			fmt.Println(string(txid))
+			fmt.Println(string("refund address:"))
+			fmt.Println(string(refund))
+			//post request for payment	//fmt.Println(fmt.Sprintf(`curl --request POST --url https://payment.snipcart.com/api/private/custom-payment-gateway/payment --header 'Authorization: Bearer %s' --header 'content-type: application/json' --data '{"paymentSessionId": "%s", "state": "processed", "error": ""}'`, os.Getenv("APIKEY"), pmtsess.ID))
+			url :=  "https://payment.snipcart.com/api/private/custom-payment-gateway/payment"
+			postdata := fmt.Sprintf(`{"paymentSessionId": "%s", "state": "processed", "error": ""}`, pmtsess.ID)
+			var jsonStr = []byte(postdata)
+			req0, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonStr))
+			req0.Header.Set("Authorization", "Bearer " + os.Getenv("APIKEY"))
+			req0.Header.Set("Content-Type", "application/json")
+			resp, err := myClient.Do(req0)
+			if err != nil {slog.Fatalln(err)}
+			defer resp.Body.Close()
+			var redir PaymentConfirmation
+			decoder := json.NewDecoder(resp.Body)
+			err = decoder.Decode(&redir)
+			if err != nil {slog.Fatalln(err)}
+			fmt.Println("HTTP Response Status:", resp.StatusCode, http.StatusText(resp.StatusCode))
+			//fmt.Println(string(resp))
+			body, err := ioutil.ReadAll(resp.Body)
+			if err != nil {slog.Fatalln(err)}
+			fmt.Println(string("submit payment response:"))
+			fmt.Println(string(body))
+			fmt.Println(string(redir.Returnurl))
+			http.Redirect(w, req, redir.Returnurl, http.StatusSeeOther)
+		}
+		} else {tpl1.ExecuteTemplate(w, "index.html", pmtreq)}
+}
 //
 var myClient = &http.Client{Timeout: 10 * time.Second}
 //
-func nextAddress() string {
+func nextSkyAddress() string {
 	fmt.Println(string("Checking for next available address"))
-	file, _ := ioutil.ReadFile("addresses.txt")
+	file, _ := ioutil.ReadFile("sky-addresses.txt")
 	notfound := "address not found"
 	addresses := AddressList{}
 	address := notfound //default to not found, overwrite address when found
@@ -398,9 +524,46 @@ func nextAddress() string {
 return address
 }
 
+func nextNessAddress() string {
+	fmt.Println(string("Checking for next available address"))
+	file, _ := ioutil.ReadFile("ness-addresses.txt")
+	notfound := "address not found"
+	addresses := AddressList{}
+	address := notfound //default to not found, overwrite address when found
+	testaddress := notfound
+	_ = json.Unmarshal([]byte(file), &addresses)
+	for i := 0; i < len(addresses.Addresses); i++ {
+		if address == notfound {
+			var q Balance //the struct that maps to the response of the query
+			testaddress = addresses.Addresses[i]
+			fmt.Println(string("Checking Addresses..."))
+			fmt.Println(string("http://127.0.0.1:8002/api/balance?addrs="+ testaddress))
+			resp1, err := http.Get("http://127.0.0.1:8002/api/balance?addrs="+ testaddress)
+			if err != nil {slog.Fatalln(err)}
+			defer resp1.Body.Close()
+			decoder := json.NewDecoder(resp1.Body)
+			err = decoder.Decode(&q)
+			if err != nil {slog.Fatalln(err)}
+			fmt.Println("HTTP Response Status:", resp1.StatusCode, http.StatusText(resp1.StatusCode))
+			fmt.Println(string("Address"))
+			fmt.Println(string(testaddress))
+			fmt.Println(string("Current Coins:"))
+			fmt.Println(q.Confirmed.Coins)
+			if q.Confirmed.Coins == 0 {
+				fmt.Println(string("Address is empty, Using:"))
+				fmt.Println(string(testaddress))
+				address = testaddress
+				return address
+			}
+		}
+	}
+return address
+}
+
 var AppUrl string = "https://pay.magnetosphere.net/paywithskycoin" // return payment methods
 var SkyCheckOutUrl string = "https://pay.magnetosphere.net/paywithskycoin/payment"	// payment modal
 var BtcCheckOutUrl string = "https://pay.magnetosphere.net/paywithbitcoin"	// payment modal
+var NessCheckOutUrl string = "https://pay.magnetosphere.net/paywithprivateness"	// payment modal
 
 	type PaymentMethods struct {	// bad name for this func
 			Invoice struct {
