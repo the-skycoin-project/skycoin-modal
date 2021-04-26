@@ -12,15 +12,20 @@ yay -S go hugo skycoin-explorer skycoin-bin
 ```
 Note: the skycoin explorer will be added to the [.deb package repo](https://the-sycoin-project.github.io) soon.
 
-Additionally, to live reload the application you will need:
+Additional optional dependencies
+```
+yay -S privateness bitcoind nbxplorer btcpayserver
+```
+Note: nbxplorer and btcpayserver fail to build currently, while a full bitcoin node may take up to 2 months to sync initially.
+
+To live reload the application you will need:
 ```
 go get github.com/pilu/fresh
 sudo ln -s ~/go/bin/fresh /usr/bin/fresh
 ```
-
 (Alternatively, you can add GOBIN to your PATH)
 
-## Sync Dependencies
+## Sync Go Dependencies
 
 Sync the needed golang dependencies
 ```
@@ -40,7 +45,6 @@ hugo -D
 ```
 
 Live-editing the hugo templates is also possible, this is done independent of the golang web application.
-
 ```
 hugo server -D
 ```
@@ -91,15 +95,35 @@ In the author's test environment, `caddy` server is used to reverse proxy the ap
 
 example Caddyfile:
 ```
-pay.example.com {
+example.net {
+reverse_proxy 127.0.0.1:8040
+}
+pay.example.net {
 reverse_proxy 127.0.0.1:8041
 }
+btc.example.net {
+reverse_proxy 127.0.0.1:23000
+}
+skycoin.example.net {
+reverse_proxy 127.0.0.1:8001
+}
+ness.example.net {
+reverse_proxy 127.0.0.1:8002
+}
 ```
+
+The above defined endpoints correspond to the following:
+
+`pay.example.net`  payment modal / web app
+`btc.example.net`  BTCPayServer instance
+`skycoin.example.net`  skycoin explorer
+`ness.example.net`    privateness explorer
+
+Note: it is not required to have the privateness or skycoin explorers on their own subdomain, only running on the same machine.
 
 ## Snipcart Integration
 
 In the payment methods request URL field of the [snipcart dashboard](https://app.snipcart.com/dashboard/account/gateway/customgateway) the following endpoint is specified:
-
 ```
 https://pay.example.com/paywithskycoin
 ```
@@ -117,8 +141,10 @@ To display the correct addresses for your webstore, these addresses must be gene
 Create the wallet addresses in a secure environment (using the wallet gui is most functional), create 100 addresses and export them to a file:
 ```
 skycoin-cli listWallets
-skycoin-cli listAddresses 2021_04_20_7ba7.wlt > addresses.txt
+skycoin-cli listAddresses 2021_04_20_7ba7.wlt > sky-addresses.txt
 ```
+
+NOTE FOR PRIVATENESS: the privateness-cli is glitchy at the moment, so save your wallet in your skycoin wallet dir and use skycoin-cli after opening the wallet in the GUI. (The addresses will be the same) save the json-formatted list of addresses output by skycoin-cli to `ness-addresses.txt`
 
 Save these addresses somewhere in case you need to manually recover them.
 
@@ -148,21 +174,23 @@ bin/skycoin-explorer
 
 make sure your skycoin node is running on the default port :6420
 
-## Testing
 
-Goto your webstore, add some items to your snipcart cart, and proceed through the steps until the payment methods are displayed. Verify that the payment method appears, and select it.
+## Run a Privateness Node
 
-The skycoin payment request modal is shown, with the first address found to not have coins. The QR code of this address is also displayed, as well as the quote in US dollars is displayed and the payment amount for sky. Enter a transaction ID (or any numbers) and click submit to be redirected to the order confirmation.
+if using the AUR package
+```
+ness-wallet
+```
+
+the above section pertaining to skycoin still applies
+
 
 ## TO DO
 
-Revise GUI / branding to exactly match skycoin and remove any unnecessary scripts
+Revise GUI / branding to exactly match per crypto and remove any unnecessary scripts
 
 Autodetect payment and redirect / remove txid entry
 
 ## Simultaneous Support for Fibercoins
 
-This would require non-conflicting ports of the running wallet and skycoin-explorer instances.
-
-For fibercoins using the same port as the skycoin wallet (6420) one only need start a different wallet in place of skycoin.
-Note: be careful that the default folder the blockchain is stored in is not the same as `~/.skycoin`
+The ness-explorer is included in the release section
