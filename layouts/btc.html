@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="{{ .Site.LanguageCode }}">
+<head>
+		<title> {{ .Site.Title }} </title>
+
+		{{ partial "head.html" . }}
+
+</head>
+    {{ partial "header.html" . }}
+<body>
+<div class="container-fluid" id="home-container">
+        <div class="row">
+            <div class="col-md-12">
+                <div class="col-md-4"></div>
+                    <div class="col-md-4">
+                        <div class="panel panel-default">
+                            <div class="panel-body text-center">
+                                <div class="row">
+                                    <div class="col-md-12 ">
+																			<h1>click to proceed to btc payment</h1>
+																			<script>if(!window.btcpay){    var head = document.getElementsByTagName('head')[0];   var script = document.createElement('script');   script.src='https://btc.magnetosphere.net/modal/btcpay.js';   script.type = 'text/javascript';   head.append(script);}function onBTCPayFormSubmit(event){    var xhttp = new XMLHttpRequest();    xhttp.onreadystatechange = function() {        if (this.readyState == 4 && this.status == 200) {            if(this.status == 200 && this.responseText){                var response = JSON.parse(this.responseText);                window.btcpay.showInvoice(response.invoiceId);            }        }    };    xhttp.open("POST", event.target.getAttribute('action'), true);    xhttp.send(new FormData( event.target ));}</script><style type="text/css"> .btcpay-form { display: inline-flex; align-items: center; justify-content: center; } .btcpay-form--inline { flex-direction: row; } .btcpay-form--block { flex-direction: column; } .btcpay-form--inline .submit { margin-left: 15px; } .btcpay-form--block select { margin-bottom: 10px; } .btcpay-form .btcpay-custom-container{ text-align: center; }.btcpay-custom { display: flex; align-items: center; justify-content: center; } .btcpay-form .plus-minus { cursor:pointer; font-size:25px; line-height: 25px; background: #DFE0E1; height: 30px; width: 45px; border:none; border-radius: 60px; margin: auto 5px; display: inline-flex; justify-content: center; } .btcpay-form select { -moz-appearance: none; -webkit-appearance: none; appearance: none; color: currentColor; background: transparent; border:1px solid transparent; display: block; padding: 1px; margin-left: auto; margin-right: auto; font-size: 11px; cursor: pointer; } .btcpay-form select:hover { border-color: #ccc; } #btcpay-input-price { -moz-appearance: none; -webkit-appearance: none; border: none; box-shadow: none; text-align: center; font-size: 25px; margin: auto; border-radius: 5px; line-height: 35px; background: #fff; } </style>
+																			<form method="POST"  onsubmit="onBTCPayFormSubmit(event);return false"  action="https://btc.magnetosphere.net/api/v1/invoices" class="btcpay-form btcpay-form--block">
+																				<input type="hidden" name="storeId" value="5VrWYtRDGfraCA9A9xfsNizEt6moU5hZyG1pShrJS3Cv" />
+																				<input type="hidden" name="jsonResponse" value="true" />
+																				{{ .UsdAmount1 | safeHTML }}
+																				<input type="hidden" name="currency" value="USD" />
+																				<input type="image" class="submit" name="submit" src="http://magnetosphere.net/img/pay.png" style="width:209px" alt="Pay with BtcPay, Self-Hosted Bitcoin Payment Processor">
+																			</form>
+                                    </div>
+                                </div>
+                            </div>
+                            <div id="IdFooter" class="panel-footer text-center">
+                            <ul>
+				            </ul>
+                            </div>
+                        </div>
+                    </div>
+                <div class="col-md-4"></div>
+                </div>
+        </div>
+    </div>
+    <div class="footer">
+    {{ partial "footer.html" . }}
+    </div>
+</body>
+</html>

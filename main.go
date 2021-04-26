@@ -1,5 +1,7 @@
+/* // 2021 Moses Narrow //  */
+/* // Skycoin Payment modal web app and api //  */
+/* // custom payment gateway integration with snipcart.com of skycoin and btcpayserver //  */
 package main
-
 import (
 	"bytes"
 	"encoding/base64"
@@ -26,43 +28,24 @@ import (
 	"github.com/rakyll/statik/fs"
 	  qrcode "github.com/skip2/go-qrcode"
 	)
-
 func init() {
 	if "LOCAL" == strings.ToUpper(os.Getenv("ENV")) {
 		slog.SetFormatter(&slog.TextFormatter{})
 		slog.SetLevel(slog.DebugLevel)} else {
 		slog.SetFormatter(&slog.JSONFormatter{})
 		slog.SetLevel(slog.InfoLevel)}}
-
 func main() {
-	// Load environment variables
-	var (
+	var (		// Load environment variables
 		env     = strings.ToUpper(os.Getenv("ENV")) // LOCAL, DEV, STG, PRD
 		port    = os.Getenv("PORT")                 // server traffic on this port
 		version = os.Getenv("VERSION")              // path to VERSION file
 	)
-	// Read version information
-	version, err := ParseVersionFile(version)
-	if err != nil {
-		slog.WithFields(slog.Fields{
-			"env":  env,
-			"err":  err,
-			"path": os.Getenv("VERSION"),
-		}).Fatal("Can't find a VERSION file")
-		return}
-	slog.WithFields(slog.Fields{
-		"env":     env,
-		"path":    os.Getenv("VERSION"),
-		"version": version,
-	}).Info("Loaded VERSION file")
+	version, err := ParseVersionFile(version)	// Read version information
+	if err != nil {	slog.WithFields(slog.Fields{"env":env,"err":err,"path":os.Getenv("VERSION"),}).Fatal("Can't find a VERSION file")
+	return}
+	slog.WithFields(slog.Fields{"env":env,"path":os.Getenv("VERSION"),"version": version,}).Info("Loaded VERSION file")
 	//userStore := passport.NewUserService(passport.CreateMockDataSet())	// Initialise data storage
-	appEnv := AppEnv{	// Initialise application context
-		Render:    render.New(),
-		Version:   version,
-		Env:       env,
-		Port:      port,
-		//UserStore: userStore,
-	}
+	appEnv := AppEnv{Render:render.New(),Version:version,Env:env,Port:port,}	//UserStore: userStore,}	// Initialise application context
 	StartServer(appEnv)	// Start application
 }
 // AppEnv holds application configuration data
@@ -75,12 +58,7 @@ type AppEnv struct {
 // CreateContextForTestSetup initialises an application context struct	// for testing purposes
 func CreateContextForTestSetup() AppEnv {
 	testVersion := "0.0.0"
-	appEnv := AppEnv{
-		Render:    render.New(),
-		Version:   testVersion,
-		Env:       "LOCAL",
-		Port:      "8041",
-	}	//UserStore: NewUserService(CreateMockDataSet()),
+	appEnv := AppEnv{Render:render.New(),Version:testVersion,Env:"LOCAL",Port:"8041",}	//UserStore: NewUserService(CreateMockDataSet()),
 	return appEnv
 }
 // StartServer Wraps the mux Router and uses the Negroni Middleware
@@ -91,11 +69,7 @@ func StartServer(appEnv AppEnv) {
 	for _, route := range routes {
 		var handler http.Handler
 		handler = MakeHandler(appEnv, route.HandlerFunc)
-		router.
-			Methods(route.Method).
-			Path(route.Pattern).
-			Name(route.Name).
-			Handler(handler)
+		router.Methods(route.Method).Path(route.Pattern).Name(route.Name).Handler(handler)
 	}
 	router.PathPrefix("/").Handler(http.StripPrefix("/", http.FileServer(statikFS)))
 	// security
@@ -141,8 +115,10 @@ var routes = Routes{
 	/*// https://docs.snipcart.com/v3/custom-payment-gateway/technical-reference //*/
 	Route{"PaymentMethods", "POST", "/paywithskycoin", PaymentMethodsURL},	//return payment methods
 	Route{"ModalTest", "GET", "/paywithskycoin", ModalTestURL},	//test view of payment modal
-	Route{"Payment", "GET", "/paywithskycoin/payment", PaymentURL},	//payment modal or request page with slug = jwt token
-	Route{"Payment", "POST", "/paywithskycoin/payment", PaymentURL},	//payment modal or request page with slug = jwt token
+	Route{"Payment", "GET", "/paywithskycoin/payment", PaymentURL},	//payment modal or request page
+	Route{"Payment", "POST", "/paywithskycoin/payment", PaymentURL},	//payment modal or request page
+	Route{"Payment", "GET", "/paywithbitcoin", BTCPaymentURL},
+	Route{"Payment", "Post", "/paywithbitcoin", BTCPaymentURL},
 }
 // HandlerFunc is a custom implementation of the http.HandlerFunc
 type HandlerFunc func(http.ResponseWriter, *http.Request, AppEnv)
@@ -151,10 +127,8 @@ type HandlerFunc func(http.ResponseWriter, *http.Request, AppEnv)
 // a function of the type http.HandlerFunc so can be passed on to the HandlerFunc in main.go.
 func MakeHandler(appEnv AppEnv, fn func(http.ResponseWriter, *http.Request, AppEnv)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Terry Pratchett tribute
-		w.Header().Set("X-Clacks-Overhead", "GNU Terry Pratchett")
-		// return function with AppEnv
-		fn(w, r, appEnv)
+		w.Header().Set("X-Clacks-Overhead", "GNU Terry Pratchett")		// Terry Pratchett tribute
+		fn(w, r, appEnv)		// return function with AppEnv
 	}
 }
 // HealthcheckHandler returns useful info about the app
@@ -176,21 +150,28 @@ func PaymentMethodsURL(w http.ResponseWriter, req *http.Request, appEnv AppEnv) 
 		appEnv.Render.JSON(w, http.StatusBadRequest, response)
 		return}
 	fmt.Println(string("Request Publictoken: " + p.Publictoken))
-	fmt.Println("Request validation...") //request validation step	// https://docs.snipcart.com/v3/custom-payment-gateway/technical-reference#request
+	fmt.Println(string("Request validation...")) //request validation step	// https://docs.snipcart.com/v3/custom-payment-gateway/technical-reference#request
 	fmt.Println(string("https://payment.snipcart.com/api/public/custom-payment-gateway/validate?publicToken="+ p.Publictoken))
 	resp, err := http.Get("https://payment.snipcart.com/api/public/custom-payment-gateway/validate?publicToken="+ p.Publictoken)
 	if err != nil {slog.Fatalln(err)}
 	fmt.Println("HTTP Response Status:", resp.StatusCode, http.StatusText(resp.StatusCode))
 	// fill in the struct with the response
-	pmr1 := make([]PaymentMethodsResponseStruct, 0)
-	pmr := PaymentMethodsResponseStruct{}
-	pmr.ID = "skycoin_payment"
-	pmr.Name = "Skycoin"
-	pmr.Checkouturl = CheckOutUrl //+ p.Publictoken //they actually append a new public token on their end to the URL provided
-	pmr1 = append(pmr1, pmr)
-	pmr2, _ := json.Marshal(pmr)
-	fmt.Println(string(pmr2))
-	appEnv.Render.JSON(w, http.StatusOK, pmr1)
+	pmr0 := make([]PaymentMethodsResponseStruct, 0)
+	pmr1 := PaymentMethodsResponseStruct{}
+	pmr1.ID = "skycoin_payment"
+	pmr1.Name = "Skycoin"
+	pmr1.Checkouturl = SkyCheckOutUrl //+ p.Publictoken //they actually append a new public token on their end to the URL provided
+	pmr0 = append(pmr0, pmr1)
+	pmr01, _ := json.Marshal(pmr1)
+	fmt.Println(string(pmr01))
+	pmr2 := PaymentMethodsResponseStruct{}
+	pmr2.ID = "bitcoin_payment"
+	pmr2.Name = "Bitcoin"
+	pmr2.Checkouturl = BtcCheckOutUrl //+ p.Publictoken //they actually append a new public token on their end to the URL provided
+	pmr0 = append(pmr0, pmr2)
+	pmr02, _ := json.Marshal(pmr2)
+	fmt.Println(string(pmr02))
+	appEnv.Render.JSON(w, http.StatusOK, pmr0)
 }
 //time function embedded in the page
 func monthDayYear() string { return time.Now().Format("Monday January 2, 2006 15:04:05") }
@@ -199,46 +180,44 @@ func ModalTestURL(w http.ResponseWriter, req *http.Request, appEnv AppEnv) {	//s
 	wd, err := os.Getwd()
 	if err != nil {log.Fatal(err)}
 	var fm = template.FuncMap{"fdateMDY": monthDayYear,}
-	pmr := PaymentRequest{}
-	pmr.Address = "2jBbGxZRGoQG1mqhPBnXnLTxK6oxsTf8os6" //hardcoding genesis address as example
-	qrc, err := qrcode.Encode("skycoin:" + pmr.Address, qrcode.Medium, 512)
+	pmtreq := PaymentRequest{}
+	pmtreq.CryptoName = "Skycoin"
+	pmtreq.Ticker = "SKY"
+	pmtreq.Address = "2jBbGxZRGoQG1mqhPBnXnLTxK6oxsTf8os6" //hardcoding genesis address as example
+	qrc, err := qrcode.Encode("skycoin:" + pmtreq.Address, qrcode.Medium, 512)
 	if err != nil {fmt.Printf("could not generate QRCode: %v", err)}
-	pmr.QRCode = base64.StdEncoding.EncodeToString(qrc)
+	pmtreq.QRCode = base64.StdEncoding.EncodeToString(qrc)
 	var pricequeryresponse PriceQuery
 	resp1, err := http.Get("https://api.coinpaprika.com/v1/tickers/sky-skycoin?quotes=USD")
 	if err != nil {slog.Fatalln(err)}
 	body, err := ioutil.ReadAll(resp1.Body)	// Read the response body
 	if err != nil {slog.Fatalln(err)}
-	fmt.Println("coinpaprika response:")
-	fmt.Println(string(body))
+	fmt.Println(string("coinpaprika response:"))
+	fmt.Println(body)
 	_ = json.Unmarshal([]byte(body), &pricequeryresponse)
 	currentrate := 	pricequeryresponse.Quotes.Usd.Price
 	fmt.Println(string("currect rate"))
 	s := fmt.Sprintf("%.2f", currentrate)
 	fmt.Println(string(s))
-	pmr.UsdAmount = 100.00
-	quoteinsky := pmr.UsdAmount / currentrate
+	pmtreq.UsdAmount = 100.00
+	quoteinsky := pmtreq.UsdAmount / currentrate
 	if currentrate < 10.0 { quoteinsky = math.Floor(quoteinsky*1000)/1000	} else {	quoteinsky = math.Floor(quoteinsky*10000)/10000	}	//adapt the precision to the current rate
-	pmr.SkyAmount = quoteinsky
+	pmtreq.Amount = quoteinsky
 	tpl1 := template.Must(template.New("").Funcs(fm).ParseFiles(wd + "/public/index.html"))
-	tpl1.ExecuteTemplate(w, "index.html", pmr)	//payment modal
+	tpl1.ExecuteTemplate(w, "index.html", pmtreq)	//payment modal
 }
 // payment request // expecting GET
 func PaymentURL(w http.ResponseWriter, req *http.Request, appEnv AppEnv) {
-	//slug := mux.Vars(req)["slug"] //public token provided previously must be validated first
-	slug := req.URL.RawQuery
-	fmt.Println(string("Request Publictoken / URL Slug: "))
+	slug := req.URL.RawQuery	//slug := mux.Vars(req)["slug"] //public token provided previously must be validated first
+	fmt.Println(string("Request Publictoken"))
 	fmt.Println(string(slug))
-	//request validation step	// https://docs.snipcart.com/v3/custom-payment-gateway/technical-reference#request
-	fmt.Println("Request validation...")
+	fmt.Println(string("Request validation..."))	//request validation step	// https://docs.snipcart.com/v3/custom-payment-gateway/technical-reference#request
 	fmt.Println(string("https://payment.snipcart.com/api/public/custom-payment-gateway/validate?"+ slug))
 	resp, err := http.Get("https://payment.snipcart.com/api/public/custom-payment-gateway/validate?"+ slug)
-	if err != nil {	slog.Fatalln(err)	}
-	fmt.Println("request validation response:")
+	if err != nil {	slog.Fatalln(err)	}	//fmt.Println(string("request validation response:")
 	fmt.Println("HTTP Response Status:", resp.StatusCode, http.StatusText(resp.StatusCode))
-	//retrieve the payment session //https://docs.snipcart.com/v3/custom-payment-gateway/technical-reference#retrieve-a-payment-session
 	pmtsess := PaymentSession{}
-	fmt.Println(string("Retrieving payment session..."))
+	fmt.Println(string("Retrieving payment session..."))	//retrieve the payment session //https://docs.snipcart.com/v3/custom-payment-gateway/technical-reference#retrieve-a-payment-session
 	fmt.Println(string("https://payment.snipcart.com/api/public/custom-payment-gateway/payment-session?"+ slug))
 	resp1, err := http.Get("https://payment.snipcart.com/api/public/custom-payment-gateway/payment-session?"+ slug)
 	if err != nil {	slog.Fatalln(err)	}
@@ -248,17 +227,17 @@ func PaymentURL(w http.ResponseWriter, req *http.Request, appEnv AppEnv) {
 	if err != nil { slog.Fatalln(err)	}
 	fmt.Println("HTTP Response Status:", resp1.StatusCode, http.StatusText(resp1.StatusCode)) //response status
 	fmt.Println(string("PaymentSession ID: " + pmtsess.ID)) //print payyment session ID to terminal
-	fmt.Println("PaymentSession Amount:")
-	fmt.Sprintf("$%.2f", pmtsess.Invoice.Amount)	//print amount
+	printamount := fmt.Sprintf("$%.2f", pmtsess.Invoice.Amount)
+	fmt.Println(string("PaymentSession Amount: " + printamount))
+	//fmt.Println(string(fmt.Sprintf("$%.2f", pmtsess.Invoice.Amount)))	//print amount
 	var fm = template.FuncMap{"fdateMDY": monthDayYear,} //current time is displayed in the page
-	pmr := PaymentRequest{}
 	var pricequeryresponse PriceQuery
 	resp2, err := http.Get("https://api.coinpaprika.com/v1/tickers/sky-skycoin?quotes=USD")
 	if err != nil {slog.Fatalln(err)}
 	body, err := ioutil.ReadAll(resp2.Body)	// Read the response body
 	if err != nil {slog.Fatalln(err)}
-	fmt.Println("coinpaprika response:")
-	fmt.Println(string(body))
+	//fmt.Println(string("coinpaprika response:"))
+	//fmt.Println(string(body))
 	_ = json.Unmarshal([]byte(body), &pricequeryresponse)
 	currentrate := 	pricequeryresponse.Quotes.Usd.Price
 	fmt.Println(string("currect rate"))
@@ -266,17 +245,20 @@ func PaymentURL(w http.ResponseWriter, req *http.Request, appEnv AppEnv) {
 	fmt.Println(string(s))
 	quoteinsky := pmtsess.Invoice.Amount / currentrate
 	if currentrate < 10.0 {	quoteinsky = math.Floor(quoteinsky*1000)/1000	} else {	quoteinsky = math.Floor(quoteinsky*10000)/10000 }	//adapt precision to the current rate
-	pmr.SkyAmount = quoteinsky
-	pmr.Address = nextAddress()	//get next address
-	qrc, err := qrcode.Encode("skycoin:" + pmr.Address, qrcode.Medium, 512)	//qr encode the address
+	pmtreq := PaymentRequest{}
+	pmtreq.CryptoName = "Skycoin"
+	pmtreq.Ticker = "SKY"
+	pmtreq.Amount = quoteinsky
+	pmtreq.Address = nextAddress()	//get next address
+	qrc, err := qrcode.Encode("skycoin:" + pmtreq.Address, qrcode.Medium, 512)	//qr encode the address
 	if err != nil {fmt.Printf("could not generate QRCode: %v", err)}
-	pmr.QRCode = base64.StdEncoding.EncodeToString(qrc)
-	pmr.UsdAmount = pmtsess.Invoice.Amount
+	pmtreq.QRCode = base64.StdEncoding.EncodeToString(qrc)
+	pmtreq.UsdAmount = pmtsess.Invoice.Amount
 	wd, err := os.Getwd()
 	if err != nil {log.Fatal(err)}
 	tpl1 := template.Must(template.New("").Funcs(fm).ParseFiles(wd + "/public/index.html"))
-	if req.Method != http.MethodGet {
-		fmt.Println(string("Submitting Payment"))
+	if req.Method != http.MethodGet {	//check for post as defined below and in the template
+		fmt.Println(string("Submitting Payment"))	//replace this stuff with autodetection of payment
 		txid := req.FormValue("txid")
 		refund := req.FormValue("refund")
 		if txid != "" {
@@ -302,13 +284,81 @@ func PaymentURL(w http.ResponseWriter, req *http.Request, appEnv AppEnv) {
 			//fmt.Println(string(resp))
 			body, err := ioutil.ReadAll(resp.Body)
 			if err != nil {slog.Fatalln(err)}
-			fmt.Println("submit payment response:")
+			fmt.Println(string("submit payment response:"))
 			fmt.Println(string(body))
 			fmt.Println(string(redir.Returnurl))
 			http.Redirect(w, req, redir.Returnurl, http.StatusSeeOther)
 		}
-		} else {tpl1.ExecuteTemplate(w, "index.html", pmr)}
-	}
+		} else {tpl1.ExecuteTemplate(w, "index.html", pmtreq)}
+}
+// payment request // expecting GET
+func BTCPaymentURL(w http.ResponseWriter, req *http.Request, appEnv AppEnv) {
+	slug := req.URL.RawQuery	//slug := mux.Vars(req)["slug"] //public token provided previously must be validated first
+	fmt.Println(string("Request Publictoken"))
+	fmt.Println(string(slug))
+	fmt.Println(string("Request validation..."))	//request validation step	// https://docs.snipcart.com/v3/custom-payment-gateway/technical-reference#request
+	fmt.Println(string("https://payment.snipcart.com/api/public/custom-payment-gateway/validate?"+ slug))
+	resp, err := http.Get("https://payment.snipcart.com/api/public/custom-payment-gateway/validate?"+ slug)
+	if err != nil {	slog.Fatalln(err)	}	//fmt.Println(string("request validation response:")
+	fmt.Println("HTTP Response Status:", resp.StatusCode, http.StatusText(resp.StatusCode))
+	pmtsess := PaymentSession{}
+	fmt.Println(string("Retrieving payment session..."))	//retrieve the payment session //https://docs.snipcart.com/v3/custom-payment-gateway/technical-reference#retrieve-a-payment-session
+	fmt.Println(string("https://payment.snipcart.com/api/public/custom-payment-gateway/payment-session?"+ slug))
+	resp1, err := http.Get("https://payment.snipcart.com/api/public/custom-payment-gateway/payment-session?"+ slug)
+	if err != nil {	slog.Fatalln(err)	}
+	defer resp1.Body.Close()
+	decoder := json.NewDecoder(resp1.Body)
+	err = decoder.Decode(&pmtsess)
+	if err != nil { slog.Fatalln(err)	}
+	fmt.Println("HTTP Response Status:", resp1.StatusCode, http.StatusText(resp1.StatusCode)) //response status
+	fmt.Println(string("PaymentSession ID: " + pmtsess.ID)) //print payyment session ID to terminal
+	printamount := fmt.Sprintf("$%.2f", pmtsess.Invoice.Amount)
+	fmt.Println(string("PaymentSession Amount: " + printamount))
+	//fmt.Println(string(fmt.Sprintf("$%.2f", pmtsess.Invoice.Amount)))	//print amount
+	var fm = template.FuncMap{"fdateMDY": monthDayYear,} //current time is displayed in the page
+	pmtreq := PaymentRequest{}
+	pmtreq.CryptoName = "Bitcoin"
+	pmtreq.Ticker = "BTC"
+	pmtreq.UsdAmount = pmtsess.Invoice.Amount
+	wd, err := os.Getwd()
+	if err != nil {log.Fatal(err)}
+	tpl1 := template.Must(template.New("").Funcs(fm).ParseFiles(wd + "/public/index.html"))
+	if req.Method != http.MethodGet {	//check for post as defined below and in the template
+		fmt.Println(string("BTC Payment"))	//replace this stuff with autodetection of payment
+		refund := req.FormValue("refund")
+		if refund != "" {
+			fmt.Println(string("refund address:"))
+			fmt.Println(string(refund))
+		}
+		submit := req.FormValue("submit")
+		if submit != "" {
+			fmt.Println(string("submit:"))
+			fmt.Println(string(submit))
+			url :=  "https://payment.snipcart.com/api/private/custom-payment-gateway/payment"
+			postdata := fmt.Sprintf(`{"paymentSessionId": "%s", "state": "processed", "error": ""}`, pmtsess.ID)
+			var jsonStr = []byte(postdata)
+			req0, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonStr))
+			req0.Header.Set("Authorization", "Bearer " + os.Getenv("APIKEY"))
+			req0.Header.Set("Content-Type", "application/json")
+			resp, err := myClient.Do(req0)
+			if err != nil {slog.Fatalln(err)}
+			defer resp.Body.Close()
+			var redir PaymentConfirmation
+			decoder := json.NewDecoder(resp.Body)
+			err = decoder.Decode(&redir)
+			if err != nil {slog.Fatalln(err)}
+			fmt.Println("HTTP Response Status:", resp.StatusCode, http.StatusText(resp.StatusCode))
+			//fmt.Println(string(resp))
+			body, err := ioutil.ReadAll(resp.Body)
+			if err != nil {slog.Fatalln(err)}
+			fmt.Println(string("submit payment response:"))
+			fmt.Println(string(body))
+			fmt.Println(string(redir.Returnurl))
+			http.Redirect(w, req, redir.Returnurl, http.StatusSeeOther)
+} else {tpl1.ExecuteTemplate(w, "index.html", pmtreq)}
+} else {tpl1.ExecuteTemplate(w, "index.html", pmtreq)}
+
+}
 //
 var myClient = &http.Client{Timeout: 10 * time.Second}
 //
@@ -333,7 +383,7 @@ func nextAddress() string {
 			err = decoder.Decode(&q)
 			if err != nil {slog.Fatalln(err)}
 			fmt.Println("HTTP Response Status:", resp1.StatusCode, http.StatusText(resp1.StatusCode))
-			fmt.Println("Address")
+			fmt.Println(string("Address"))
 			fmt.Println(string(testaddress))
 			fmt.Println(string("Current Coins:"))
 			fmt.Println(q.Confirmed.Coins)
@@ -349,7 +399,8 @@ return address
 }
 
 var AppUrl string = "https://pay.magnetosphere.net/paywithskycoin" // return payment methods
-var CheckOutUrl string = "https://pay.magnetosphere.net/paywithskycoin/payment"	// payment modal
+var SkyCheckOutUrl string = "https://pay.magnetosphere.net/paywithskycoin/payment"	// payment modal
+var BtcCheckOutUrl string = "https://pay.magnetosphere.net/paywithbitcoin"	// payment modal
 
 	type PaymentMethods struct {	// bad name for this func
 			Invoice struct {
@@ -473,10 +524,12 @@ type Payment struct {	//func is not currently used
 }
 //usedfor redirect url
 type PaymentConfirmation struct {	Returnurl string `json:"returnUrl"` }
-type PaymentRequest struct {	// payment request made to snipcart
+type PaymentRequest struct {	// populates payment request
+	CryptoName string
+	Ticker string
 	QRCode string
 	Address string
-	SkyAmount float64
+	Amount float64
 	UsdAmount float64
 }
 // https://github.com/skycoin/skycoin/tree/develop/cmd/skycoin-cli#list-wallet-addresses

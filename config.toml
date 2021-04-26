@@ -1,42 +1,30 @@
+# author = "Moses Narrow"
 baseURL = "http://127.0.0.1:8041/"
 languageCode = "en-us"
 title = "skycoin"
 #theme = "sky"
-#disqusShortname = "your_disqus_shortname"
 
 [menu]
 [[menu.header]]
-  identifier = "time"
-  name = "{{fdateMDY}}"
-  url = ""       # The path can lead to a content folder too.
-  weight = 0
-#  [[menu.header]]
-#    name = "about"
-#    weight = 0
-#    url = "/about"
-
+ identifier = "time"
+ name = "{{fdateMDY}}"
+ url = "" # The path can lead to a content folder too.
+ weight = 0
 
 [params]
-#  GithubID = "your_github"
-#  TwitterID = "your_twitter"
-#  LinkedInID = "your_linkedin"
-#  GoogleplusID = "your_googleplus"
-#  FacebookID = "your_facebook"
-#  TelegramID = "your_telegram"
-#  SlackURL = "your_slack_invite_url"
-  Name = "Skycoin"
-#  Email = "your_email"
-#  tagline = "Full Stack Developer"
-#  about = "Hi this is my website. I am a developer, writer and family man. I like developing websites using Hugo, sports, nature, photography and travel. On this websites you can expect my projects and blog posts about everything I love. Enjoy!"
-  ProfilePicture = "/profile.jpg"
-#  author = "Moses Narrow"
-  siteHeading = "skycoin payment"
-  mainpagetitle = "Pay with Skycoin"
-  QRCode = "{{.QRCode}}"
-  QRImage = "<img class=\"media-object dp\" src=\"data:image/png;base64,{{ .QRCode }}\" style=\"width: 256px;height:256px;\">"
-  Address = "{{.Address}}"
-  SkyAmount = "{{.SkyAmount}}"
-  UsdAmount = "{{.UsdAmount}}"
-  IfInvoice = "{{ if .Invoice ne \"\"}}"
-  Invoice = "{{.Invoice}}"
-  end = "{{end}}"
+ CryptoName = "{{.CryptoName}}"
+ Ticker = "{{.Ticker}}"
+ #siteHeading = "skycoin payment"
+ #mainpagetitle = "Pay with Skycoin"
+ QRCode = "{{.QRCode}}"
+ QRImage = "<img class=\"media-object dp\" src=\"data:image/png;base64,{{ .QRCode }}\" style=\"width: 256px;height:256px;\">"
+ Address = "{{.Address}}"
+ Amount = "{{.Amount}}"
+ UsdAmount = "{{.UsdAmount}}"
+ UsdAmount1 = "<input type=\"hidden\" name=\"price\" value=\"{{.UsdAmount}}\" />"
+ IfNotBTC = "{{ if ne .CryptoName \"Bitcoin\"}}"
+ BTCPay = "<form method=\"POST\" onsubmit=\"onBTCPayFormSubmit(event);return false\" action=\"https://btc.magnetosphere.net/api/v1/invoices\" class=\"btcpay-form btcpay-form--block\">	<input type=\"hidden\" name=\"storeId\" value=\"5VrWYtRDGfraCA9A9xfsNizEt6moU5hZyG1pShrJS3Cv\" />	<input type=\"hidden\" name=\"jsonResponse\" value=\"true\" />{{ .UsdAmount }}<input type=\"hidden\" name=\"currency\" value=\"USD\" /> <input type=\"image\" class=\"submit\" name=\"submit\" src=\"http://magnetosphere.net/img/pay.png\" style=\"width:209px\" alt=\"Pay with Bitcoin\"></form>"
+ IfInvoice = "{{ if ne .Invoice \"\"}}"
+ Invoice = "{{.Invoice}}"
+ end = "{{end}}"
+ else = "{{else}}"
